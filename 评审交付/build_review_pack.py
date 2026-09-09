@@ -10,7 +10,7 @@ from openpyxl.utils import get_column_letter
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = Path(__file__).resolve().parent
-SOURCE = ROOT / "新数值.xlsx"
+SOURCE = OUT / "source" / "新数值.xlsx"  # 历史评审使用原始基线，避免混入新表。
 
 BLUE = "1F4E78"
 TEAL = "0F766E"

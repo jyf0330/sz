@@ -6,6 +6,8 @@ import re
 
 root = Path(__file__).resolve().parents[1]
 html = (root / 'index.html').read_text()
+# 战斗页需要独立文件；图谱单文件不保留无法离线访问的跳转。
+html = re.sub(r'<a data-battle-link[^>]*>.*?</a>', '', html)
 css = (root / 'styles.css').read_text()
 assert '</style' not in css.lower()
 html = html.replace('<link rel="stylesheet" href="styles.css">', '<style>\n' + css + '\n</style>')

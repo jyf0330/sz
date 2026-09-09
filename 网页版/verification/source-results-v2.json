@@ -1,6 +1,6 @@
 {
   "status": "PASS",
-  "baseItems": 96,
+  "baseItems": 100,
   "exactSourceRules": 54,
   "checks": [
     "所有命名基础行完整收录",

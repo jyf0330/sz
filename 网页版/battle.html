@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101923">
+  <title>灵宠战斗模拟器 · 逐步结算</title>
+  <link rel="stylesheet" href="battle.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./index.html" title="返回关系图">
+      <span class="brand-mark">灵</span>
+      <span>灵宠战斗模拟器<small>TACTICAL RESOLUTION LAB</small></span>
+    </a>
+    <div class="battle-state"><span class="status-dot"></span><span id="battle-state-text">准备就绪</span><span class="divider"></span><span>第 <b id="round-number">1</b> 回合</span><span class="divider"></span><span id="turn-side-label">己方回合</span><span class="divider"></span><span>行动 <b id="action-number">0</b></span></div>
+    <div class="top-actions"><button id="config-btn" class="ghost-btn">战斗配置</button><button id="reset-btn" class="ghost-btn">重置</button><button id="run-btn" class="primary-btn">开始战斗</button></div>
+  </header>
+
+  <main class="battle-layout">
+    <aside class="side-panel detail-panel">
+      <div class="panel-title"><div><span class="kicker">INSPECTOR</span><h2>当前详情</h2></div><span class="live-chip">LIVE</span></div>
+      <div id="detail-content" class="detail-content"></div>
+      <div class="hint-box"><span>操作提示</span><p>点击灵宠查看属性；点击技能查看效果。选中灵宠后点击棋盘空格即可移动。</p></div>
+    </aside>
+
+    <section class="arena-panel">
+      <div class="arena-head"><div><span class="kicker">BATTLEFIELD / 06 × 05</span><h1>逐步结算战场</h1></div><div class="arena-tools"><button id="step-btn" class="tool-btn">结算一步 <span>→</span></button><button id="auto-btn" class="tool-btn">自动播放</button></div></div>
+      <div class="legend"><span><i class="legend-dot ally"></i>己方</span><span><i class="legend-dot enemy"></i>敌方</span><span><i class="legend-square selected"></i>当前目标</span><span><i class="legend-square range"></i>攻击范围</span><span class="legend-note">回合开始 → 操作 → 技能结算 → 回合结束</span></div>
+      <div id="turn-flow" class="turn-flow" aria-label="回合流程"></div>
+      <div id="team-context" class="team-context"></div>
+      <div id="board-wrap" class="board-wrap">
+        <div id="board" class="board" aria-label="战斗棋盘"></div>
+        <div id="resolution-banner" class="resolution-banner" hidden></div>
+      </div>
+      <div class="combat-strip"><div class="strip-label"><span>SETTLEMENT TRACE</span><b id="trace-label">等待技能结算</b></div><div id="trace-items" class="trace-items"><span class="trace-empty">点击“结算一步”开始记录技能链</span></div></div>
+
+      <div class="skills-head"><div><span class="kicker">TEAM SKILL BAR</span><h2>队伍技能栏</h2></div><div class="skills-help">拖拽技能卡改变顺序 · 从左到右结算</div></div>
+      <div id="skill-bar" class="skill-bar" aria-label="队伍技能栏"></div>
+      <div class="skill-order-note"><span class="order-arrow">←</span><span>每一步只结算当前最左侧可用技能，完成后轮转至下一格</span><span class="order-arrow">→</span></div>
+    </section>
+
+    <aside class="side-panel log-panel">
+      <div class="panel-title"><div><span class="kicker">EVENT STREAM</span><h2>战斗日志</h2></div><button id="clear-log" class="icon-btn" title="清空日志">⌫</button></div>
+      <div class="log-summary"><div><span>本回合</span><strong id="round-log-count">0</strong></div><div><span>造成伤害</span><strong id="damage-total">0</strong></div><div><span>触发事件</span><strong id="event-total">0</strong></div></div>
+      <div id="combat-log" class="combat-log" aria-live="polite"></div>
+      <div class="log-footer"><span class="pulse"></span>每个事件按实际结算顺序写入</div>
+    </aside>
+  </main>
+  <div id="toast" class="toast" hidden></div>
+  <div id="setup-modal" class="setup-modal" hidden>
+    <section class="setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+      <div class="setup-dialog-head"><div><span class="kicker">BATTLE LOADOUT / SANDBOX</span><h2 id="setup-title">战斗配置</h2></div><button id="close-setup" class="icon-btn" title="关闭配置">×</button></div>
+      <div id="setup-body" class="setup-body"></div>
+      <div class="setup-dialog-foot"><span id="setup-validation">技能总格数上限10格；每只上场灵宠至少装备1个技能。</span><div><button id="cancel-setup" class="ghost-btn">取消</button><button id="apply-setup" class="primary-btn">应用并重置战斗</button></div></div>
+    </section>
+  </div>
+  <script src="graph-data.js"></script>
+  <script src="battle-v2.js"></script>
+</body>
+</html>

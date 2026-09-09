@@ -3,7 +3,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 import json, random, hashlib
 ROOT=Path(__file__).resolve().parent
-DATA=json.loads((ROOT.parent/'网页版/graph-data.js').read_text().removeprefix('window.ATLAS_DATA = ').rstrip(';\n'))
+DATA=json.loads((ROOT/'source/graph-data.js').read_text().removeprefix('window.ATLAS_DATA = ').rstrip(';\n'))
 CAT={x['name']:x for x in DATA['items']}
 RULES=[
  '本次是1只灵兽携带2个技能的最小阵容对战，不代表正式阵容规模或已验证的槽位配置；全部采用各物品最低可用品质。',
@@ -125,7 +125,7 @@ def main():
     assert all(e['after'][k]>=0 for k in ['生命','护盾','剧毒','再生','能量'])
     assert all(0<=v<=4 for v in e['after']['弹药'].values())
  (ROOT/'三场战斗.json').write_text(json.dumps(dict(rules=RULES,battles=battles,sourceHashes=DATA['meta']['sourceHashes']),ensure_ascii=False,indent=2))
- (ROOT/'模拟规则.md').write_text('# 本次对战的暂定规则\n\n原型模拟，非正式平衡结论。输入来自 `新数值.xlsx` 最低品质记录。\n\n'+'\n\n'.join(f'{i+1}. {r}' for i,r in enumerate(RULES)))
+ (ROOT/'模拟规则.md').write_text('# 本次对战的暂定规则\n\n历史原型模拟，非正式平衡结论。输入冻结于本目录 `source/graph-data.js`，对应合并前的旧数值表，非根目录当前新表。\n\n'+'\n\n'.join(f'{i+1}. {r}' for i,r in enumerate(RULES)))
  for i,b in enumerate(battles,1):
   lines=[f'# 第{i}场：{b["teams"][0]["build"]} vs {b["teams"][1]["build"]}',f'\n结果：{b["winner"]}；{b["rounds"]}回合；随机种子 {b["seed"]}。\n\n这是按《模拟规则.md》暂定规则运行的原型对战。\n']
   current=None

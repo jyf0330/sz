@@ -1,0 +1,187 @@
+[
+  {
+    "path": "交互关系.pdf",
+    "archiveSha256": "d701892c902a60f9ba4d6460e0512753492676c6114bf61312f6962288e8f106",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "新数值.xlsx",
+    "archiveSha256": "c79d3bb085972f7d142d4c65bd6170493a25c3420d14263c59e86b2fd6889cbb",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "玩法.docx",
+    "archiveSha256": "a12dc1b551a0eafb9d8f07639bb3cf608834f62d445d45f86681d32081a5f4a4",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "网页版/README.md",
+    "archiveSha256": "de970e6a93dcd3e584aa7b1d8c8e2579d0a1d0dbed7d0f557165d06c1790684b",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/app.js",
+    "archiveSha256": "1fd41f036c75ec2966db25f806a3fb4ad283e3147491d4de36c93df65df1b6eb",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/battle-v2.js",
+    "archiveSha256": "b74020eff867f94de77155611a597165ac9edf59413eca7cf8c3977f0357197a",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/battle.css",
+    "archiveSha256": "2ce99c99a3f6ccdd77873b0bb4daa394cebd1166dfe49e312955a514a26ef8ac",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/battle.html",
+    "archiveSha256": "8c33c0702c6702cbfbfb94d30adc8eed73f3bd2da256b6fdd2fdcb400888a743",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "网页版/battle.js",
+    "archiveSha256": "738befa7a3e82acdc10115980fb8c96cac48909ef1cc89a72f791933b6ca52ce",
+    "resolution": "旧战斗实现保存在 网页版/历史版本/战斗初版/battle.js"
+  },
+  {
+    "path": "网页版/graph-data.js",
+    "archiveSha256": "3fffbc1e02a84df39256c99f7665cc024da3486ab88544f7878cb76ca6396784",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/index.html",
+    "archiveSha256": "e9f0f2906fe92bdd5413cbdc2ae6d216483828f4c84fc3d2ef18dacc1a16be11",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/scripts/build.py",
+    "archiveSha256": "01d14aa320c8055063842401d5506b5db902d82ac79765c5cbe88d1397caeb48",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/scripts/build_standalone.py",
+    "archiveSha256": "136f84ce767b80eb8a2babb1a023decf37ebef2f7023b5a3eeb159902cf92e80",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/scripts/verify.cjs",
+    "archiveSha256": "958462586acd272d9f995b63a18a7a9ce247da06fd2e826191b16cef3dc41abd",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/scripts/verify_source.py",
+    "archiveSha256": "16232011dd8b8eb7e34ed32f6b33b4aa27580a442603ef091ff8acd561d83a0e",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/source/交互关系.pdf",
+    "archiveSha256": "d701892c902a60f9ba4d6460e0512753492676c6114bf61312f6962288e8f106",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "网页版/source/新数值.xlsx",
+    "archiveSha256": "ff315a6bddf2b0c49b905c5c109ae68d26e6b08aecde5f4b700e36a1fdd6f0d6",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/source-audit.json",
+    "archiveSha256": "2d95ff4cd480f38d467f011b1620be753e10c2fa7fdb9640b929ffd7182e272b",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/styles.css",
+    "archiveSha256": "606fb737790fba5f1c08d700ecc65d1860221bcd0a57d2a36066f4ca236c2fa1",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "网页版/verification/browser-results.json",
+    "archiveSha256": "f63c4c43721aba2d8bd44ea3ef4acb571dedfeed005c105312e33c5789718bbc",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "网页版/verification/desktop.png",
+    "archiveSha256": "52d8f25c0b9a2b7bd2ce775a244cf1e243c56739c4ac2535b268b2d02a10bf91",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "网页版/verification/mobile-detail.png",
+    "archiveSha256": "e2fa14929b220ca2aa9adaae3ecabc8c10a66d227235ed0d0ad923c34c13b2e6",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "网页版/verification/mobile.png",
+    "archiveSha256": "925c811036587cb287dec3280bd1ec43d5d9b080086d046c8a000b29488820f8",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "网页版/verification/region-focus.png",
+    "archiveSha256": "2082252e074b255e61579f3c6651bd3e42c28c2bbacdff6046070ef1b9cd7b94",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "网页版/verification/source-results.json",
+    "archiveSha256": "6215d4a96cc5b8118330fd1ea8c6228a7b2670b1e400a99f40a8c6f28fe250d3",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "网页版/verification/standalone-results.json",
+    "archiveSha256": "3c730aead54ef51ff15f12e546c543a1103a7daef10c36f9f90f9a24020a5031",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "网页版/交互关系_单文件分享版.html",
+    "archiveSha256": "ca8618b0c3d92af71ab1ff181db6522c0cc277734ef235a5879bc25d742bd89b",
+    "resolution": "保留当前图谱并适配新增战斗；旧图谱版本保存在 网页版/历史版本/PDF原图版"
+  },
+  {
+    "path": "评审交付/README_交付说明.md",
+    "archiveSha256": "43dd1a214dcd12ae727e57e4584f1bc418615692c16328bc68e7c0a168bef290",
+    "resolution": "保留当前内容与历史来源说明"
+  },
+  {
+    "path": "评审交付/build_review_pack.py",
+    "archiveSha256": "d0335353212be7c07dfdff9dcd801ec3f47082a3d8ec5775557631c6d8ed9c97",
+    "resolution": "保留当前内容与历史来源说明"
+  },
+  {
+    "path": "评审交付/render_interaction_map.py",
+    "archiveSha256": "8fe642a32f8060fe09230fa5fbadd5fec6484432742587428b2d4d1fae373e98",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "评审交付/交互关系_重绘版.png",
+    "archiveSha256": "7fe10ed3f963adc4cd4155718636fc705bbbe21a35dbc73be726e4fe269d723e",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "评审交付/交互关系_重绘版.svg",
+    "archiveSha256": "5987bce60be126b26b012a8674e24be23408d0334ac43d538c3de4cd58cf9e9e",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "评审交付/大巴扎借鉴审计.xlsx",
+    "archiveSha256": "8c1a6a611d6c4409a75a4d4d5d886338d87fe325e50fc23f0a23752b927ecd95",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "评审交付/新数值_评审阅读版.xlsx",
+    "archiveSha256": "64d30d87e793173e34089b7222fccdaae463b71eab88a9cf656089a53da440d1",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "评审交付/构筑说明.md",
+    "archiveSha256": "c8e09feeff37b8b41a1e80fe53f94658c8273bdddceaf229d87c2ae405bd6089",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "评审交付/系统说明_一页版.md",
+    "archiveSha256": "dd4ef7d1bc7efb16b956ad3cc5befe3b1b4972f0f807ed688e051fe08ae026bd",
+    "resolution": "相同或完整合入"
+  },
+  {
+    "path": "评审交付/规则缺口清单.xlsx",
+    "archiveSha256": "f7fcda444346d9a584c08f2f07a4f9ea4f64265e2e86e0262c4c250bf0d4b633",
+    "resolution": "相同或完整合入"
+  }
+]
