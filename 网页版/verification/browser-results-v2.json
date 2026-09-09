@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "rules": 54,
+  "items": 96,
+  "offlineIsolatedShareFile": true,
+  "checks": [
+    "9 类机制及逐条原文渲染",
+    "悬停与浮层保持",
+    "点击固定与证据",
+    "96 件物品、分类、搜索与空结果",
+    "原表名称及黄金起始品质",
+    "缩放、展开、键盘",
+    "手机纵向流程与详情、无横向溢出",
+    "内嵌 PDF / Excel 字节与下载"
+  ],
+  "pageErrors": [],
+  "externalRequests": []
+}

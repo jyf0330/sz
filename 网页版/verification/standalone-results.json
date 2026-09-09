@@ -1,0 +1,16 @@
+{
+  "status": "PASS",
+  "isolatedFile": true,
+  "offline": true,
+  "nodes": 68,
+  "checks": [
+    "搜索与固定详情",
+    "悬停",
+    "分区缩放",
+    "手机详情",
+    "内嵌附件字节一致",
+    "表格下载文件名"
+  ],
+  "pageErrors": [],
+  "externalRequests": []
+}

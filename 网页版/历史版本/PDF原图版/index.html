@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#244e40"><title>交互关系 · 灵兽与技能图谱</title>
+<link rel="stylesheet" href="styles.css">
+<script src="graph-data.js" defer></script><script src="app.js" defer></script>
+</head>
+<body>
+<header class="topbar"><a class="brand" href="./index.html"><span class="brand-mark">关系</span><span>灵兽构筑图谱<small>INTERACTION ATLAS</small></span></a><nav><span class="version"><i></i>基础品质 · v0.1</span><a href="source/交互关系.pdf" target="_blank" rel="noopener">原始 PDF <span aria-hidden="true">↗</span></a></nav></header>
+<section class="intro"><div><div class="eyebrow">THE CONNECTIONS BEHIND EVERY BUILD</div><h1>每一种配合，<em>都有迹可循。</em></h1><p>沿着连线探索灵兽与技能。悬停查看数据，点击留住详情。</p></div><div class="intro-stat"><strong id="item-count">67</strong><span>灵兽与技能</span><b>×</b><strong>9</strong><span>交互分区</span></div></section>
+<main class="workspace">
+<aside class="library"><div class="panel-heading"><h2>物品索引</h2><span id="list-count"></span></div><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="搜索名称、效果…" aria-label="搜索物品名称或效果"><kbd>/</kbd></label><div class="type-filter" role="group" aria-label="物品类型"><button data-kind="全部" class="active" aria-pressed="true">全部</button><button data-kind="灵兽" aria-pressed="false">灵兽</button><button data-kind="技能" aria-pressed="false">技能</button></div><div id="item-list" class="item-list" aria-label="物品列表"></div><div class="library-foot"><span class="small-dot"></span>仅展示各物品的最低可用品质</div></aside>
+<section class="map-panel" aria-label="交互关系画布"><div class="map-heading"><div><span class="live-dot"></span><h2>交互关系</h2><span class="map-subtitle">原图关系视图</span></div><button id="fullscreen" class="text-button" aria-label="展开画布" title="展开画布">⛶ <span>展开</span></button></div><div id="regions" class="regions" aria-label="定位到分区"></div><div id="viewport" class="viewport" tabindex="0" aria-label="可拖动画布，用加减键缩放，方向键平移，0 键复位"><div id="map-transform"></div><div class="map-caption"><span>01 / RELATIONSHIP MAP</span><span>圆角胶囊 · 灵兽　圆角方框 · 技能</span></div><div class="map-controls"><button id="zoom-out" aria-label="缩小">−</button><output id="zoom-value" aria-label="缩放比例">100%</output><button id="zoom-in" aria-label="放大">＋</button><span></span><button id="reset" title="显示完整关系图" aria-label="显示完整关系图">⌖</button></div><div class="map-help">拖动平移 · 滚轮缩放 · 点击分区聚焦</div></div><footer class="map-footer"><span><i></i>位置、分区交叠与箭头沿用原图</span><button id="reset-bottom">查看全图 ↗</button></footer></section>
+<aside id="inspector" class="inspector" aria-label="物品详细数据"><div class="panel-heading"><h2>物品详情</h2><button id="unpin" class="text-button" hidden>取消固定</button><button id="close-detail" class="text-button" aria-label="关闭详情">✕</button></div><div id="detail" class="detail"></div><div class="inspector-foot">数据来自《新数值.xlsx》<br>后续品质暂未展开</div></aside>
+</main>
+<footer class="page-footer"><span>灵兽与技能 · 交互关系图谱</span><span>关系 / 交互关系.pdf　·　数据 / 新数值.xlsx</span><a href="source/新数值.xlsx" download>下载原始数值表 ↗</a></footer>
+<div id="hover-card" class="hover-card" role="tooltip" hidden></div>
+<div id="announcement" class="sr-only" aria-live="polite"></div>
+</body></html>

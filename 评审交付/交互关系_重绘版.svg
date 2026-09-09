@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1050" viewBox="0 0 1600 1050">
+  <defs>
+    <style>
+      .title{font:700 30px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;fill:#17324d}
+      .sub{font:14px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;fill:#526777}
+      .lane{font:700 18px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;fill:#17324d}
+      .node{font:600 15px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;fill:#17324d;text-anchor:middle;dominant-baseline:middle}
+      .small{font:13px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;fill:#526777;text-anchor:middle}
+      .edge{stroke:#6c8192;stroke-width:2.2;fill:none;marker-end:url(#arrow)}
+      .risk{stroke:#c23b33;stroke-width:3;fill:none;stroke-dasharray:9 7;marker-end:url(#redarrow)}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#6c8192"/></marker>
+    <marker id="redarrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#c23b33"/></marker>
+  </defs>
+  <rect width="1600" height="1050" fill="#f8fbfd"/>
+  <text x="70" y="60" class="title">灵兽构筑系统｜可读交互关系</text>
+  <text x="70" y="88" class="sub">从资源到触发，再到构筑与结果；红色虚线表示必须补充重入规则的循环风险</text>
+
+  <rect x="55" y="120" width="1490" height="150" rx="16" fill="#edf6ff" stroke="#93b9d8"/>
+  <text x="80" y="153" class="lane">① 资源与状态层</text>
+  <g>
+    <rect x="125" y="180" width="150" height="56" rx="12" fill="#fff" stroke="#3f83b5"/><text x="200" y="208" class="node">弹药</text>
+    <rect x="315" y="180" width="150" height="56" rx="12" fill="#fff" stroke="#3f83b5"/><text x="390" y="208" class="node">能量</text>
+    <rect x="505" y="180" width="150" height="56" rx="12" fill="#fff" stroke="#3f83b5"/><text x="580" y="208" class="node">倒计时</text>
+    <rect x="695" y="180" width="150" height="56" rx="12" fill="#fff" stroke="#3f83b5"/><text x="770" y="208" class="node">护盾/护甲？</text>
+    <rect x="885" y="180" width="150" height="56" rx="12" fill="#fff" stroke="#3f83b5"/><text x="960" y="208" class="node">灼烧 / 剧毒</text>
+    <rect x="1075" y="180" width="150" height="56" rx="12" fill="#fff" stroke="#3f83b5"/><text x="1150" y="208" class="node">亢奋 / 衰弱</text>
+    <rect x="1265" y="180" width="150" height="56" rx="12" fill="#fff" stroke="#3f83b5"/><text x="1340" y="208" class="node">暴击率</text>
+  </g>
+
+  <rect x="55" y="300" width="1490" height="155" rx="16" fill="#f2f8f1" stroke="#8bbf86"/>
+  <text x="80" y="333" class="lane">② 触发事件层</text>
+  <g>
+    <rect x="120" y="360" width="180" height="60" rx="30" fill="#fff" stroke="#4f9a58"/><text x="210" y="390" class="node">使用武技/术法</text>
+    <rect x="340" y="360" width="180" height="60" rx="30" fill="#fff" stroke="#4f9a58"/><text x="430" y="390" class="node">攻击命中/暴击</text>
+    <rect x="560" y="360" width="180" height="60" rx="30" fill="#fff" stroke="#4f9a58"/><text x="650" y="390" class="node">获得护盾/治疗</text>
+    <rect x="780" y="360" width="180" height="60" rx="30" fill="#fff" stroke="#4f9a58"/><text x="870" y="390" class="node">施加元素状态</text>
+    <rect x="1000" y="360" width="180" height="60" rx="30" fill="#fff" stroke="#4f9a58"/><text x="1090" y="390" class="node">获得增益/减益</text>
+    <rect x="1220" y="360" width="180" height="60" rx="30" fill="#fff" stroke="#4f9a58"/><text x="1310" y="390" class="node">回合/死亡事件</text>
+  </g>
+
+  <rect x="55" y="485" width="1490" height="225" rx="16" fill="#fff8ea" stroke="#dfb760"/>
+  <text x="80" y="518" class="lane">③ 构筑转换层</text>
+  <g>
+    <rect x="100" y="555" width="230" height="105" rx="14" fill="#fff" stroke="#d49424"/><text x="215" y="585" class="node">多武器 / 暴击</text><text x="215" y="615" class="small">高频行动 → 暴击</text><text x="215" y="637" class="small">→ 全队武技成长</text>
+    <rect x="370" y="555" width="230" height="105" rx="14" fill="#fff" stroke="#d49424"/><text x="485" y="585" class="node">弹药</text><text x="485" y="615" class="small">消耗 → 爆发</text><text x="485" y="637" class="small">→ 装填 → 再爆发</text>
+    <rect x="640" y="555" width="230" height="105" rx="14" fill="#fff" stroke="#d49424"/><text x="755" y="585" class="node">充能</text><text x="755" y="615" class="small">积累能量 → 爆能</text><text x="755" y="637" class="small">→ 大效果</text>
+    <rect x="910" y="555" width="230" height="105" rx="14" fill="#fff" stroke="#d49424"/><text x="1025" y="585" class="node">灼烧 / 剧毒</text><text x="1025" y="615" class="small">施加 → 留存/引爆</text><text x="1025" y="637" class="small">→ 治疗/追加伤害</text>
+    <rect x="1180" y="555" width="230" height="105" rx="14" fill="#fff" stroke="#d49424"/><text x="1295" y="585" class="node">护盾 / 增减益</text><text x="1295" y="615" class="small">获得状态 → 分发</text><text x="1295" y="637" class="small">→ 生存/成长</text>
+  </g>
+
+  <rect x="55" y="740" width="1490" height="165" rx="16" fill="#f7f1fb" stroke="#aa88c3"/>
+  <text x="80" y="773" class="lane">④ 战斗结果层</text>
+  <g>
+    <rect x="150" y="810" width="210" height="60" rx="12" fill="#fff" stroke="#8a62a6"/><text x="255" y="840" class="node">直接/持续伤害</text>
+    <rect x="440" y="810" width="210" height="60" rx="12" fill="#fff" stroke="#8a62a6"/><text x="545" y="840" class="node">治疗/护盾/再生</text>
+    <rect x="730" y="810" width="210" height="60" rx="12" fill="#fff" stroke="#8a62a6"/><text x="835" y="840" class="node">技能与属性成长</text>
+    <rect x="1020" y="810" width="210" height="60" rx="12" fill="#fff" stroke="#8a62a6"/><text x="1125" y="840" class="node">控制/阵型破坏</text>
+    <rect x="1310" y="810" width="160" height="60" rx="12" fill="#fff" stroke="#8a62a6"/><text x="1390" y="840" class="node">胜负</text>
+  </g>
+
+  <path class="edge" d="M200 236 C200 300 210 310 210 360"/><path class="edge" d="M390 236 C390 300 430 310 430 360"/>
+  <path class="edge" d="M580 236 C580 315 1310 300 1310 360"/><path class="edge" d="M770 236 C770 310 650 310 650 360"/>
+  <path class="edge" d="M960 236 C960 310 870 310 870 360"/><path class="edge" d="M1150 236 C1150 310 1090 310 1090 360"/>
+  <path class="edge" d="M1340 236 C1340 315 430 300 430 360"/>
+  <path class="edge" d="M210 420 C210 500 215 500 215 555"/><path class="edge" d="M430 420 C430 500 215 500 215 555"/>
+  <path class="edge" d="M430 420 C430 500 485 500 485 555"/><path class="edge" d="M650 420 C650 500 1295 500 1295 555"/>
+  <path class="edge" d="M870 420 C870 500 1025 500 1025 555"/><path class="edge" d="M1090 420 C1090 500 1295 500 1295 555"/>
+  <path class="edge" d="M1310 420 C1310 520 755 500 755 555"/>
+  <path class="edge" d="M215 660 C215 740 255 750 255 810"/><path class="edge" d="M485 660 C485 740 255 750 255 810"/>
+  <path class="edge" d="M755 660 C755 740 835 750 835 810"/><path class="edge" d="M1025 660 C1025 740 255 750 255 810"/><path class="edge" d="M1025 660 C1025 740 545 750 545 810"/><path class="edge" d="M1295 660 C1295 740 545 750 545 810"/>
+  <path class="edge" d="M1295 660 C1295 740 835 750 835 810"/><path class="edge" d="M360 840 L440 840"/><path class="edge" d="M650 840 L730 840"/><path class="edge" d="M940 840 L1020 840"/><path class="edge" d="M1230 840 L1310 840"/>
+
+  <path class="risk" d="M1025 555 C910 500 920 450 870 420"/>
+  <path class="risk" d="M1025 660 C910 710 720 675 650 420"/>
+  <text x="835" y="700" class="sub" fill="#c23b33">治疗 ↔ 施毒等组合可能循环：必须增加事件重入保护</text>
+
+  <text x="70" y="950" class="lane">阅读结论</text>
+  <text x="70" y="982" class="sub">现有内容已经形成构筑网络；真正阻塞制作的不是内容数量，而是行动时序、触发重入、目标确定性与数值预算仍未闭合。</text>
+  <text x="70" y="1012" class="sub">原创化优先级：强化棋盘站位 → 强化灵兽与技能绑定 → 把充能/爆能和双层元素做成核心决策。</text>
+</svg>
