@@ -32,6 +32,10 @@ body { min-width: 0; }
 .shop-item { display: flex; min-width: 0; justify-content: space-between; margin-bottom: 6px; padding: 8px; }
 .shop-item small { display: block; margin-top: 4px; }
 .shop-item button { width: auto; height: auto; padding: 7px; font-size: 11px; }
+.setup-item-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.setup-info-btn { flex: 0 0 auto; padding: 6px 8px; border: 1px solid #39636b; border-radius: 4px; color: #9edecb; background: #132b32; font-size: 10px; cursor: pointer; }
+.setup-info-btn:hover { border-color: var(--mint); background: #1c4141; }
+.setup-info-btn:disabled { opacity: .35; cursor: not-allowed; }
 .setup-error { color: var(--red); }
 @media (max-width: 1400px) {
   .battle-layout { grid-template-columns: 210px minmax(0, 1fr) 240px; }
@@ -59,6 +63,10 @@ body { min-width: 0; }
 }
 /* v2 emits flow-step/unit-state names; keep summaries readable. */
 .unit-state { max-width: 90%; font-size: 8px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skill-card.skill-locked { opacity: .62; filter: saturate(.72); }
+.skill-card.skill-locked .skill-availability { color: var(--red); }
+.skill-availability { color: var(--mint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 58%; }
+.equip-owner { max-width: 86px; margin: 0 4px 4px 0; padding: 4px; color: var(--soft); background: #0b151d; border: 1px solid #2a4653; border-radius: 4px; font-size: 9px; }
 .flow-step { flex: 1; min-width: 62px; padding: 6px 3px; font-size: 10px; color: var(--muted); text-align: center; }
 .flow-step.active { color: var(--mint); background: #173a3e; border-radius: 5px; }
 .team-context { grid-template-columns: 1fr; }
@@ -67,9 +75,51 @@ body { min-width: 0; }
 .phase-context { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; }
 .log-panel { max-height: max(720px, calc(100vh - 114px)); }
 .combat-log { min-height: 0; }
+.team-context { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; }
+.phase-context { align-items: center; justify-content: center; text-align: center; padding: 0 8px; }
+.skill-explosion { margin-top: 7px; padding: 5px 6px; border: 1px solid #80633c; border-radius: 4px; color: #ffd58e; background: #3a2e20; font: 9px ui-monospace, monospace; text-align: center; }
+.skill-actual-values { margin: 9px 0 6px; padding: 7px 8px; border: 1px solid #315c5b; border-radius: 5px; background: #132f31; }
+.skill-actual-values span { display: block; color: #79bbaa; font-size: 8px; }
+.skill-actual-values strong { display: block; margin-top: 4px; color: #e3fff3; font: 700 13px ui-monospace, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skill-ability span { color: #718992; font-size: 8px; }
+.value-breakdown-list { display: grid; gap: 6px; }
+.value-breakdown { padding: 8px 9px; border: 1px solid #2a4650; border-radius: 6px; background: #101e27; }
+.value-breakdown>div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.value-breakdown span { color: #8bcab7; font-size: 10px; }
+.value-breakdown strong { color: #ffe2ae; font: 700 14px ui-monospace, monospace; }
+.value-breakdown p { margin: 5px 0 0; color: #9db3b2; font-size: 9px; line-height: 1.55; }
+.detail-skill-list { display: grid; gap: 6px; }
+.detail-skill-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 7px 8px; border: 1px solid #2b4a53; border-radius: 5px; background: #172a34; color: #d8e8e1; text-align: left; }
+.detail-skill-link:hover { border-color: var(--mint); background: #1d3a3d; }
+.detail-skill-link span { font-size: 10px; font-weight: 650; }
+.detail-skill-link span small { display: block; margin-top: 3px; color: #9fb8b5; font-size: 8px; font-weight: 400; }
+.detail-skill-link small { color: var(--amber); font: 8px ui-monospace, monospace; }
+.explosion-tag { color: #ffd58e; }
+.unit-direction { position: absolute; top: 3px; left: 5px; color: #bcecdf; font: 9px ui-monospace, monospace; }
+.unit.enemy .unit-direction { color: #ffc0b7; }
+.skill-info-modal { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 24px; background: #061018c9; backdrop-filter: blur(8px); }
+.skill-info-modal[hidden] { display: none; }
+.skill-info-dialog { width: min(560px, 100%); max-height: min(720px, 90vh); overflow: auto; background: linear-gradient(145deg, #12212d, #0d1720); border: 1px solid #54716e; border-radius: 12px; box-shadow: 0 24px 80px #000b; }
+.skill-info-head { display: flex; align-items: center; justify-content: space-between; padding: 17px 20px; border-bottom: 1px solid #2a424f; }
+.skill-info-head h2 { margin: 5px 0 0; font-size: 19px; }
+.skill-info-content { padding: 20px; }
+.skill-info-summary { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #2d4a54; border-radius: 8px; background: #172835; }
+.skill-info-summary strong { display: block; color: #ffe2ae; font-size: 16px; }
+.skill-info-summary small { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; }
+.skill-info-effect { margin: 15px 0; color: #d5e3df; font-size: 12px; line-height: 1.7; }
+.skill-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.skill-info-grid div { min-width: 0; padding: 9px; border: 1px solid #273e4b; border-radius: 6px; background: #0f1a24; }
+.skill-info-grid span, .skill-info-grid b { display: block; }
+.skill-info-grid span { margin-bottom: 5px; color: #718994; font-size: 9px; }
+.skill-info-grid b { color: #d8e7e1; font-size: 11px; line-height: 1.4; }
 @media (max-width: 600px) {
   .unit-state { display: none; }
   .unit-icon { font-size: 14px; }
   .unit-name { font-size: 7px; margin-top: 2px; }
   .log-panel { max-height: 600px; }
+}
+@media (max-width: 720px) {
+  .team-context { grid-template-columns: 1fr; }
+  .phase-context { justify-content: flex-start; text-align: left; padding: 0; }
+  .skill-info-modal { padding: 10px; }
 }

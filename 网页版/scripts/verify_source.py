@@ -3,7 +3,7 @@ from pathlib import Path
 import json,hashlib
 import openpyxl
 root=Path(__file__).resolve().parents[2];out=root/'网页版'
-d=json.loads((out/'graph-data.js').read_text().removeprefix('window.ATLAS_DATA = ').rstrip(';\n'))
+d=json.loads((out/'graph-data.js').read_text(encoding='utf-8').removeprefix('window.ATLAS_DATA = ').rstrip(';\n'))
 w=openpyxl.load_workbook(root/'新数值.xlsx',data_only=True)
 rank={'青铜':0,'白银':1,'黄金':2,'钻石':3}
 expected=[]
@@ -39,5 +39,5 @@ for f,h in d['meta']['sourceHashes'].items():
  assert hashlib.sha256((root/f).read_bytes()).hexdigest()==h
  assert (root/f).read_bytes()==(out/'source'/f).read_bytes()
 result={'status':'PASS','baseItems':len(d['items']),'exactSourceRules':sum(len(m['rules']) for m in d['mechanisms']),'checks':['所有命名基础行完整收录','所有字段逐格等于原表','各物品最低品质','每条条件与效果均为该物品原文片段','来源工作表和行号','原始文件哈希与附件一致']}
-(out/'verification'/'source-results-v2.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+(out/'verification'/'source-results-v2.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
 print(result)

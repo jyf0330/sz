@@ -14,10 +14,17 @@ for s in w:
   col=1 if pet else 0
   if not row[col]:continue
   fields={str(h):v for h,v in zip(rows[0],row) if h is not None}
-  items.append(dict(id=f'item-{len(items)+1}',name=str(row[col]),kind='灵兽' if pet else '技能',tier=row[2 if pet else 1],fields=fields,effect=row[7 if pet else 5],source={'sheet':s.title,'row':i}))
+  tier_col=2 if pet else 1
+  variants=[dict(tier=row[tier_col],fields=fields,source={'sheet':s.title,'row':i})]
+  for j,upgrade in enumerate(rows[i:],i+1):
+   if upgrade[col]:break
+   if upgrade[tier_col] in ['青铜','白银','黄金','钻石']:
+    upgrade_fields={str(h):v for h,v in zip(rows[0],upgrade) if h is not None}
+    variants.append(dict(tier=upgrade[tier_col],fields=upgrade_fields,source={'sheet':s.title,'row':j}))
+  items.append(dict(id=f'item-{len(items)+1}',name=str(row[col]),kind='灵兽' if pet else '技能',tier=row[tier_col],fields=fields,effect=row[7 if pet else 5],source={'sheet':s.title,'row':i},variants=variants))
 byname={x['name']:x for x in items}
 assert len(byname)==len(items)
-mechanisms=json.loads((OUT/'scripts/rules.json').read_text())
+mechanisms=json.loads((OUT/'scripts/rules.json').read_text(encoding='utf-8'))
 for m in mechanisms:
  for i,r in enumerate(m['rules']):
   item=byname[r['item']];r['itemId']=item['id'];r['id']=f'{m["id"]}-{i}'
@@ -30,14 +37,14 @@ for m in mechanisms:
   if any(k in text for k in m['keywords']) or any(r['itemId']==item['id'] for r in m['rules']):
    item.setdefault('mechanisms',[]).append(m['id'])
 for item in items:item.setdefault('mechanisms',[])
-examples=json.loads((OUT/'scripts/examples.json').read_text())
+examples=json.loads((OUT/'scripts/examples.json').read_text(encoding='utf-8'))
 for ex in examples:
  for name in [ex['pet'],*ex['skills']]:assert name in byname
  for step in ex['steps']:
   assert step['quote'] in byname[step['source']]['effect']
   assert all(n in [ex['pet'],*ex['skills']] for n in step['active'])
 meta={'itemCount':len(items),'petCount':sum(i['kind']=='灵兽' for i in items),'skillCount':sum(i['kind']=='技能' for i in items),'ruleCount':sum(len(m['rules']) for m in mechanisms),'mechanismCount':len(mechanisms),'sourceHashes':{f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest() for f in ['新数值.xlsx','交互关系.pdf']}}
-(OUT/'graph-data.js').write_text('window.ATLAS_DATA = '+json.dumps(dict(items=items,mechanisms=mechanisms,examples=examples,meta=meta),ensure_ascii=False)+';\n')
-(OUT/'source-audit.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2))
+(OUT/'graph-data.js').write_text('window.ATLAS_DATA = '+json.dumps(dict(items=items,mechanisms=mechanisms,examples=examples,meta=meta),ensure_ascii=False)+';\n',encoding='utf-8')
+(OUT/'source-audit.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2),encoding='utf-8')
 for f in meta['sourceHashes']:shutil.copy2(ROOT/f,OUT/'source'/f)
 print(meta)

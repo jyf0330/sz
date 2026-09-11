@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101923">
   <title>灵宠战斗模拟器 · 逐步结算</title>
-  <link rel="stylesheet" href="battle.css">
+  <link rel="stylesheet" href="battle.css?v=20260911b">
 </head>
 <body>
   <header class="topbar">
@@ -55,7 +55,19 @@
       <div class="setup-dialog-foot"><span id="setup-validation">技能总格数上限10格；每只上场灵宠至少装备1个技能。</span><div><button id="cancel-setup" class="ghost-btn">取消</button><button id="apply-setup" class="primary-btn">应用并重置战斗</button></div></div>
     </section>
   </div>
+  <div id="skill-info-modal" class="skill-info-modal" hidden>
+    <section class="skill-info-dialog" role="dialog" aria-modal="true" aria-labelledby="skill-info-title">
+      <div class="skill-info-head"><div><span class="kicker">SKILL INSPECTOR</span><h2 id="skill-info-title">技能详情</h2></div><button id="close-skill-info" class="icon-btn" title="关闭技能详情">×</button></div>
+      <div id="skill-info-content" class="skill-info-content"></div>
+    </section>
+  </div>
+  <div id="config-info-modal" class="skill-info-modal" hidden>
+    <section class="skill-info-dialog" role="dialog" aria-modal="true" aria-labelledby="config-info-title">
+      <div class="skill-info-head"><div><span class="kicker">LOADOUT INSPECTOR</span><h2 id="config-info-title">配置详情</h2></div><button id="close-config-info" class="icon-btn" title="关闭配置详情">×</button></div>
+      <div id="config-info-content" class="skill-info-content"></div>
+    </section>
+  </div>
   <script src="graph-data.js"></script>
-  <script src="battle-v2.js"></script>
+  <script src="battle-v2.js?v=20260911b"></script>
 </body>
 </html>
