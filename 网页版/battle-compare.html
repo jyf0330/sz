@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1517">
+  <meta name="description" content="正式战斗模拟器与未完成命契构筑示例的内部对照页。">
+  <title>战斗主版与未完成示例 · 数值设计工作台</title>
+  <link rel="stylesheet" href="battle-compare.css?v=20260911a">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./index.html"><span>灵</span><div><b>主版与示例</b><small>INTERNAL COMBAT BENCH</small></div></a>
+    <nav><a href="./index.html">返回机制图谱</a></nav>
+  </header>
+
+  <main>
+    <section class="intro">
+      <span class="eyebrow">SOLE MAINLINE / UNFINISHED EXAMPLE</span>
+      <h1>一套正式主版，一个未完成构筑示例。</h1>
+      <p>原战斗模拟器是唯一主页面与规则展示基线。命契3v3仅保留为尚未纳入正式规则的内部构筑示例，不进入主入口，也不构成第二套权威。</p>
+      <aside class="prototype-warning"><b>未完成示例</b> 命契3v3中的暂定数值只用于观察毒火构筑节奏，不能覆盖主模拟器的规则、默认阵容或验收结论。</aside>
+    </section>
+
+    <section class="mode-grid" aria-label="两种战斗模式">
+      <article class="mode-card classic">
+        <header><span class="mode-number">01</span><span class="mode-chip">现有沙盒</span></header>
+        <div class="mode-mark">灵</div>
+        <span class="mode-en">TACTICAL RESOLUTION LAB</span>
+        <h2>原战斗模拟器</h2>
+        <p>保留现有棋盘部署、灵宠技能、回合操作和逐步结算，继续从当前数值表数据工作。</p>
+        <dl>
+          <div><dt>战斗形态</dt><dd>棋盘部署 + 回合结算</dd></div>
+          <div><dt>验证重点</dt><dd>站位、范围、技能链</dd></div>
+          <div><dt>数据边界</dt><dd>现有灵宠与技能数据</dd></div>
+        </dl>
+        <a class="open-button" href="battle.html"><span>打开原模拟器</span><b>↗</b></a>
+      </article>
+
+      <article class="mode-card life-link">
+        <header><span class="mode-number">02</span><span class="mode-chip">未完成示例</span></header>
+        <div class="mode-mark">契</div>
+        <span class="mode-en">LIFE-LINK COMBAT LAB</span>
+        <h2>命契3v3 构筑示例</h2>
+        <p>尚未完成的毒火配队演示。固定生命、阵亡反噬与独立毒源均只属于该示例，尚未成为正式模式规则。</p>
+        <dl>
+          <div><dt>战斗形态</dt><dd>锁阵 + 全自动 3v3</dd></div>
+          <div><dt>验证重点</dt><dd>反噬、毒龄、毒火节奏</dd></div>
+          <div><dt>数据边界</dt><dd>6 只宠物的独立原型数据</dd></div>
+        </dl>
+        <a class="open-button" href="battle-life-link.html"><span>查看未完成示例</span><b>↗</b></a>
+      </article>
+    </section>
+
+    <section class="comparison">
+      <header><div><span class="eyebrow">MAINLINE / EXAMPLE</span><h2>主版与构筑示例对照</h2></div><p>右栏只记录未完成示例当前怎样运行，不代表已批准的正式规则或第二模式。</p></header>
+      <div class="compare-table" role="table" aria-label="两种战斗模式规则对照">
+        <div class="compare-row table-head" role="row"><b role="columnheader">对照项</b><b role="columnheader">正式主版</b><b role="columnheader">未完成示例</b></div>
+        <div class="compare-row" role="row"><b role="rowheader">玩家操作</b><span role="cell">部署、点选、技能顺序与逐步结算。</span><span role="cell">开战前确认阵容；锁定后全自动。</span></div>
+        <div class="compare-row" role="row"><b role="rowheader">时间模型</b><span role="cell">战术回合与技能结算步。</span><span role="cell">离散回合，每个事件可单独复现。</span></div>
+        <div class="compare-row" role="row"><b role="rowheader">英雄与宠物</b><span role="cell">按原沙盒的英雄、灵宠和棋盘规则结算。</span><span role="cell">英雄 50 生命；三宠总生命严格为 30。</span></div>
+        <div class="compare-row" role="row"><b role="rowheader">宠物阵亡</b><span role="cell">沿用原规则的阵亡、复活与胜负处理。</span><span role="cell">立即按初始最大生命反噬所属英雄。</span></div>
+        <div class="compare-row" role="row"><b role="rowheader">剧毒</b><span role="cell">沿用原引擎的剧毒与状态结算。</span><span role="cell">每份毒源独立计龄；伤害 = 基础毒 × 毒龄。</span></div>
+        <div class="compare-row" role="row"><b role="rowheader">调试手段</b><span role="cell">结算一步与自动播放。</span><span role="cell">暂停、单事件、单回合和固定种子。</span></div>
+        <div class="compare-row" role="row"><b role="rowheader">当前验证范围</b><span role="cell">现有数值表和沙盒合并兼容性。</span><span role="cell">河豚/水母/猫鱼 对锦鲤/打火机/巨龙的固定 3v3。</span></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

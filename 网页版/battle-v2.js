@@ -178,7 +178,10 @@
     const categories = EFFECT_CATEGORY_RULES.filter(([, pattern]) => pattern.test(text)).map(([label]) => label);
     return categories.length ? categories.slice(0, 3) : ['机制'];
   }
-  const skillEffectLabel = skill => skillEffectCategories(skill).join(' / ');
+  const skillEffectLabel = skill => {
+    if (!skill) return '未知物品｜机制';
+    return String(skill.name || '未命名物品') + '｜' + skillEffectCategories(skill).join('/');
+  };
   const skillLabelByName = name => {
     const catalog = SKILL_CATALOG.find(item => item.name === name || item.name === SKILL_ALIAS[name]);
     return catalog ? skillEffectLabel(catalog) : String(name || '机制');
@@ -190,9 +193,7 @@
     return result;
   }
   function skillChoiceLabel(skill) {
-    const ability = String(skill && skill.ability || '').trim();
-    const range = String(skill && skill.range || '').trim();
-    return [skillEffectLabel(skill), ability, range].filter(Boolean).join('｜');
+    return skillEffectLabel(skill);
   }
   const isAttackSkill = skill => /攻击\d|伤害\d|点燃|淬毒|造成伤害/.test((skill && skill.ability || '') + ' ' + (skill && skill.effect || ''));
   const PASSIVE_SKILL_NAMES = new Set(['连抓', '锋锐鳞片', '饮血倒刺']);
@@ -204,38 +205,36 @@
 
   const defaultConfig = {
     player: {
-      level: 1, income: 20, history: 0, heroHp: 240,
+      level: 1, income: 20, history: 0, heroHp: 360,
       pets: [
         {name:'烁德童子', quality:'青铜'},
         {name:'花椒蟹', quality:'白银'},
         {name:'白蔷薇', quality:'白银'},
-        {name:'通灵钟', quality:'白银'}
+        {name:'', quality:'青铜'}
       ],
       skills: [
         {name:'蓄能', quality:'青铜', owner:0},
-        {name:'元气弹', quality:'白银', owner:0},
         {name:'引火', quality:'青铜', owner:1},
-        {name:'鞭炮', quality:'青铜', owner:1},
+        {name:'天火咒', quality:'青铜', owner:0},
+        {name:'火中取栗', quality:'青铜', owner:1},
         {name:'乱抓', quality:'白银', owner:2},
-        {name:'天火咒', quality:'青铜', owner:3}
+        {name:'元气弹', quality:'白银', owner:2}
       ]
     },
     enemy: {
-      level: 1, income: 20, history: 0, heroHp: 240,
+      level: 2, income: 30, history: 0, heroHp: 360,
       pets: [
-        {name:'蕈章', quality:'青铜'},
-        {name:'鲛人抢手', quality:'白银'},
-        {name:'黑玫瑰', quality:'白银'},
+        {name:'饿狼', quality:'青铜'},
+        {name:'岩豚', quality:'青铜'},
         {name:'沼泽鼠', quality:'白银'},
+        {name:'赤精鱼', quality:'青铜'}
       ],
       skills: [
-        {name:'披甲', quality:'青铜', owner:0},
-        {name:'毒钩', quality:'青铜', owner:0},
-        {name:'蜈蚣锁', quality:'青铜', owner:1},
-        {name:'蜷缩', quality:'青铜', owner:1},
-        {name:'泰诺地龙', quality:'白银', owner:2},
-        {name:'毒雾', quality:'青铜', owner:3},
-        {name:'疗愈术', quality:'青铜', owner:3}
+        {name:'啃咬', quality:'青铜', owner:0},
+        {name:'利爪', quality:'青铜', owner:1},
+        {name:'毒钩', quality:'青铜', owner:2},
+        {name:'火球', quality:'青铜', owner:3},
+        {name:'轻击', quality:'青铜', owner:0}
       ]
     }
   };
@@ -451,10 +450,56 @@
   function ownerOf(skill) { return skill && skill.owner ? unitById(skill.owner) : null; }
   function opponentSide(side) { return side === 'player' ? 'enemy' : 'player'; }
 
+  function plainLogText(text) {
+    const node = document.createElement('div');
+    node.innerHTML = String(text == null ? '' : text);
+    return (node.textContent || '').trim();
+  }
+
+  function logSkillFromText(text) {
+    const plain = plainLogText(text);
+    const name = SKILL_CATALOG.map(item => item.name).sort((a, b) => b.length - a.length).find(item => plain.includes(item));
+    if (!name) return null;
+    const runtimeSkills = (state.playerSkills || []).concat(state.enemySkills || []);
+    return runtimeSkills.find(item => item.name === name) || SKILL_CATALOG.find(item => item.name === name) || null;
+  }
+
+  function logItemLabel(text, meta) {
+    const plain = plainLogText(text);
+    const skill = logSkillFromText(plain);
+    if (skill) return skillEffectLabel(skill);
+    const petName = PET_CATALOG.map(item => item.name).sort((a, b) => b.length - a.length).find(name => plain.includes(name));
+    return petName || meta || '系统事件';
+  }
+
+  function logTargetLabel(text) {
+    const plain = plainLogText(text);
+    const skill = logSkillFromText(plain);
+    const owner = skill ? ownerOf(skill) : null;
+    const unitTargets = allUnits()
+      .filter(unit => plain.includes(unit.name) && (!owner || unit.id !== owner.id))
+      .map(unit => unit.name)
+      .filter((name, index, names) => names.indexOf(name) === index);
+    const heroTargets = ['己方英雄', '敌方英雄', '玩家英雄', '对手英雄'].filter(name => plain.includes(name));
+    const targets = unitTargets.concat(heroTargets);
+    if (targets.length) return targets.join('、');
+    if (skill) return skill.range || '按物品文案选取';
+    return '战斗状态';
+  }
+
   function log(text, kind = 'info', meta = 'SYSTEM') {
     state.events += 1;
     state.roundEvents += 1;
-    state.logs.push({round: state.round, action: state.action, text: publicSkillText(text), kind, meta});
+    const publicText = publicSkillText(text);
+    state.logs.push({
+      round: state.round,
+      action: state.action,
+      text: publicText,
+      item: logItemLabel(publicText, meta),
+      target: logTargetLabel(publicText),
+      kind,
+      meta
+    });
     if (state.logs.length > 150) state.logs.shift();
     renderLog();
   }
@@ -1023,7 +1068,11 @@
   function renderLog() {
     const logNode = $('#combat-log');
     logNode.innerHTML = state.logs.length ? state.logs.map(entry =>
-      '<div class="log-entry ' + esc(entry.kind) + '"><div class="log-time"><span>R' + entry.round + ' · STEP ' + (entry.action || '—') + '</span><span>' + esc(entry.meta) + '</span></div><div class="log-text">' + entry.text + '</div></div>'
+      '<div class="log-entry ' + esc(entry.kind) + '">' +
+        '<div class="log-time"><span>时间 / 结算步 · R' + entry.round + ' · STEP ' + (entry.action || '—') + '</span><span>' + esc(entry.meta) + '</span></div>' +
+        '<div class="log-fields"><span><b>物品 / 事件</b>' + esc(entry.item || entry.meta) + '</span><span><b>作用对象</b>' + esc(entry.target || '战斗状态') + '</span></div>' +
+        '<div class="log-text"><b class="log-field-label">效果与结果</b>' + entry.text + '</div>' +
+      '</div>'
     ).join('') : '<div class="detail-empty">暂无战斗事件</div>';
     logNode.scrollTop = logNode.scrollHeight;
     $('#damage-total').textContent = state.damage;

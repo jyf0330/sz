@@ -196,3 +196,33 @@ body { min-width: 0; }
   .guide-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
   .unit:hover::after { display: none; }
 }
+
+.log-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+.log-fields span {
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid #213641;
+  border-radius: 4px;
+  background: #0d1922;
+  color: #a8c0bf;
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.log-fields b,
+.log-field-label {
+  display: block;
+  margin-bottom: 3px;
+  color: #607d84;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.log-text > .log-field-label { color: #607d84; }
+@media (max-width: 720px) {
+  .log-fields { grid-template-columns: 1fr; }
+}

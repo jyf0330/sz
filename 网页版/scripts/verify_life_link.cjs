@@ -72,6 +72,7 @@ async function browserChecks() {
       page.on('request', (request) => { if (/^https?:/.test(request.url())) externalRequests.push(request.url()); });
       await page.goto(pathToFileURL(path.join(root, 'battle-life-link.html')).href);
       await page.waitForFunction(() => window.lifeLinkSimulator && document.querySelectorAll('.pet-card').length === 6);
+      assert.ok((await page.locator('.prototype-warning').innerText()).includes('不构成正式模式'));
       assert.equal(await page.locator('.pet-card').count(), 6);
       assert.equal(await page.locator('.hero-card').count(), 2);
       assert.ok((await page.locator('.rule-metric-row').innerText()).includes('30'));
@@ -116,6 +117,23 @@ async function browserChecks() {
       results[viewport.name] = { viewport, pageErrors: errors, externalRequests, noHorizontalOverflow: await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth) };
       await context.close();
     }
+    const mainContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, offline: true });
+    const mainPage = await mainContext.newPage();
+    await mainPage.goto(pathToFileURL(path.join(root, 'battle.html')).href);
+    assert.equal(await mainPage.locator('a[href="battle-life-link.html"], [data-battle-compare-link]').count(), 0);
+    await mainPage.goto(pathToFileURL(path.join(root, 'index.html')).href);
+    assert.equal(await mainPage.locator('a[href="battle-life-link.html"], [data-battle-compare-link]').count(), 0);
+    await mainContext.close();
+    for (const viewport of [{ name: 'desktop', width: 1480, height: 1000 }, { name: 'mobile', width: 390, height: 844 }]) {
+      const compareContext = await browser.newContext({ viewport, offline: true });
+      const comparePage = await compareContext.newPage();
+      await comparePage.goto(pathToFileURL(path.join(root, 'battle-compare.html')).href);
+      assert.equal(await comparePage.locator('.mode-card').count(), 2);
+      assert.ok((await comparePage.locator('.prototype-warning').innerText()).includes('未完成示例'));
+      assert.ok(await comparePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await comparePage.screenshot({ path: path.join(root, 'verification/battle-compare-' + viewport.name + '.png'), fullPage: true });
+      await compareContext.close();
+    }
     return results;
   } finally {
     await browser.close();
@@ -125,7 +143,7 @@ async function browserChecks() {
 (async () => {
   const engine = engineChecks();
   const browser = await browserChecks();
-  const result = { status: 'PASS', scope: '命契3v3独立规则集语义与离线可见界面（含自动播放/暂停/单事件/单回合）', engine, browser };
+  const result = { status: 'PASS', scope: '命契3v3未完成构筑示例的隔离、标识、语义与离线界面；不代表正式模式验收', engine, browser };
   fs.writeFileSync(path.join(root, 'verification/life-link-results.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
 })().catch((error) => {
