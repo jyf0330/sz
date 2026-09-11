@@ -1,0 +1,43 @@
+{
+  "status": "PASS",
+  "scope": "命契3v3独立规则集语义与离线可见界面（含自动播放/暂停/单事件/单回合）",
+  "engine": {
+    "checks": [
+      "双方固定3宠与30点生命预算",
+      "首回合打火机毒死、反噬与英雄毒伤",
+      "日志时间/物品/对象/效果/结果完整",
+      "锦鲤净毒转火与水母复制毒龄",
+      "同种子全战斗可复现",
+      "交换视角不改变胜负真相"
+    ],
+    "winner": "侵蚀体系",
+    "rounds": 4,
+    "events": 68,
+    "finalHp": {
+      "poisonHero": 39,
+      "fireHero": 0
+    }
+  },
+  "browser": {
+    "desktop": {
+      "viewport": {
+        "name": "desktop",
+        "width": 1480,
+        "height": 1000
+      },
+      "pageErrors": [],
+      "externalRequests": [],
+      "noHorizontalOverflow": true
+    },
+    "mobile": {
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "pageErrors": [],
+      "externalRequests": [],
+      "noHorizontalOverflow": true
+    }
+  }
+}

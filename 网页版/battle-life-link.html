@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07110f">
+  <meta name="description" content="命契3v3独立战斗模拟器：阵亡反噬、毒龄倍率与毒火对战。">
+  <title>命契3v3·毒火对决</title>
+  <link rel="stylesheet" href="life-link.css?v=20260911a">
+</head>
+<body>
+  <header class="topbar">
+    <a class="mode-brand" href="./index.html" aria-label="返回机制图谱">
+      <span class="brand-seal">契</span>
+      <span><b>命契3v3</b><small>LIFE-LINK COMBAT LAB</small></span>
+    </a>
+    <div class="battle-meta" aria-live="polite">
+      <span class="live-dot"></span>
+      <span id="state-label">阵容待锁定</span>
+      <i></i>
+      <span>回合 <b id="round-label">0</b></span>
+      <i></i>
+      <span>种子 <b id="seed-label">#3303</b></span>
+    </div>
+    <nav class="top-links" aria-label="模式导航">
+      <a href="battle.html">原模拟器</a>
+      <button id="rules-button" type="button">规则与暂定项</button>
+    </nav>
+  </header>
+
+  <main class="page-shell">
+    <section class="hero-copy">
+      <div>
+        <span class="eyebrow">ASYNC BUILD · DETERMINISTIC RESOLUTION</span>
+        <h1>三只宠物，一条命。</h1>
+        <p>摆好阵容后一键开战。宠物阵亡会按初始生命反噬英雄，而毒会在宠物与英雄两条通道同时计龄。</p>
+      </div>
+      <div class="rule-metric-row" aria-label="核心规则">
+        <div><strong>50</strong><span>英雄生命</span></div>
+        <div><strong>30</strong><span>宠物总生命</span></div>
+        <div><strong>3v3</strong><span>全自动阵容</span></div>
+        <div><strong>基础毒×龄</strong><span>线性毒龄倍率</span></div>
+      </div>
+    </section>
+
+    <section class="battle-console">
+      <div class="phase-rail" id="phase-rail" aria-label="战斗流程">
+        <span data-phase="opening">战斗开始</span><b>→</b>
+        <span data-phase="round_start">回合开始</span><b>→</b>
+        <span data-phase="abilities">速度释放</span><b>→</b>
+        <span data-phase="death">阵亡反噬</span><b>→</b>
+        <span data-phase="burn">灼烧</span><b>→</b>
+        <span data-phase="poison">剧毒</span><b>→</b>
+        <span data-phase="victory_check">胜负</span>
+      </div>
+
+      <div class="arena" id="arena">
+        <div class="ambient ambient-left"></div>
+        <div class="ambient ambient-right"></div>
+        <section id="left-team" class="team-column" aria-label="左方阵容"></section>
+        <div class="versus-column" aria-hidden="true">
+          <span class="versus-line"></span>
+          <div class="versus-medallion">VS<small id="round-medallion">R0</small></div>
+          <span class="versus-line"></span>
+        </div>
+        <section id="right-team" class="team-column right" aria-label="右方阵容"></section>
+        <div id="countdown-overlay" class="countdown-overlay" hidden><span>3</span><small>阵容已锁定</small></div>
+        <div id="winner-overlay" class="winner-overlay" hidden></div>
+      </div>
+
+      <div class="control-deck">
+        <div class="primary-controls">
+          <button id="start-button" class="start-button" type="button"><span>锁定阵容</span><b>开始战斗</b></button>
+          <button id="pause-button" class="control-button" type="button" disabled>暂停</button>
+          <button id="event-button" class="control-button" type="button">单事件 <span>→</span></button>
+          <button id="round-button" class="control-button" type="button">单回合 <span>⇥</span></button>
+        </div>
+        <div class="secondary-controls">
+          <label for="speed-select">播放速度</label>
+          <select id="speed-select" aria-label="自动播放速度">
+            <option value="1100">×0.75</option>
+            <option value="700" selected>×1</option>
+            <option value="350">×2</option>
+            <option value="120">×4</option>
+          </select>
+          <button id="swap-button" class="quiet-button" type="button">⇄ 交换视角</button>
+          <button id="reset-button" class="quiet-button" type="button">↻ 重置</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="analysis-grid">
+      <article class="event-focus" aria-live="polite">
+        <header><div><span class="section-kicker">CURRENT EVENT</span><h2>当前结算</h2></div><span id="event-counter">000</span></header>
+        <div id="current-event" class="current-event empty">
+          <span class="event-icon">◇</span>
+          <div><b>等待开战</b><p>点击「开始战斗」自动播放，或用单事件逐条检查。</p></div>
+        </div>
+        <div class="poison-preview">
+          <span>河豚基础 8 毒</span>
+          <div><i style="--h:25%"></i><b>8</b><small>龄1</small></div>
+          <div><i style="--h:50%"></i><b>16</b><small>龄2</small></div>
+          <div><i style="--h:75%"></i><b>24</b><small>龄3</small></div>
+          <div><i style="--h:100%"></i><b>32</b><small>龄4</small></div>
+        </div>
+      </article>
+
+      <article class="log-panel">
+        <header>
+          <div><span class="section-kicker">SETTLEMENT TRACE</span><h2>逐事件战斗日志</h2></div>
+          <div class="log-filters" role="group" aria-label="日志筛选">
+            <button class="active" data-filter="all" type="button">全部</button>
+            <button data-filter="poison" type="button">剧毒</button>
+            <button data-filter="burn" type="button">灼烧</button>
+            <button data-filter="death" type="button">阵亡</button>
+          </div>
+        </header>
+        <div class="log-table-wrap">
+          <table>
+            <thead><tr><th>时间</th><th>物品 / 事件</th><th>作用对象</th><th>效果与结果</th></tr></thead>
+            <tbody id="log-body"><tr class="empty-row"><td colspan="4">事件队列尚未启动。</td></tr></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="rules-dialog" class="rules-dialog">
+    <form method="dialog"><button class="dialog-close" aria-label="关闭">×</button></form>
+    <span class="section-kicker">RULE CONTRACT / V1</span>
+    <h2>命契3v3 规则与暂定项</h2>
+    <div id="rules-content"></div>
+  </dialog>
+
+  <script src="life-link-data.js"></script>
+  <script src="life-link-engine.js"></script>
+  <script src="life-link-app.js"></script>
+</body>
+</html>

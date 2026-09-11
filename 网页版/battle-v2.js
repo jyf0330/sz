@@ -111,6 +111,33 @@
   };
   const numberFor = (text, fallback) => parseFirst(text, [/攻击(\d+)/, /伤害(\d+)/, /点燃(\d+)/, /淬毒(\d+)/, /治疗(\d+)/, /护甲(\d+)/], fallback);
   const VALUE_LABELS = {damage: '伤害', burn: '点燃', poison: '淬毒', shield: '护盾', heal: '治疗', regen: '再生'};
+  const TERM_DICTIONARY = {
+    '灵宠': ['战场单位', '己方可在部署阶段移动。灵宠被击倒时，所属英雄失去等同于该灵宠生命上限的生命，灵宠通常两回合后复活。'],
+    '技能栏': ['结算顺序', '技能从左到右被轮流检查；“结算一步”一次只处理一个技能。部署阶段可拖拽技能卡改变顺序。'],
+    '攻击范围': ['目标规则', '技能只能影响文案指定的格子或对象。点技能后，棋盘上高亮区域就是它能覆盖的范围。'],
+    '技能格数': ['构筑成本', '短篇、中篇、长篇技能分别占 1、2、3 格；每支队伍的技能总格数上限为 10。'],
+    '技能类型': ['分类标签', '武技、术法、心法、暗器、器灵、符箓、陷阱和丹药是技能分类。它们可被其他效果引用；除非物品文案明确说明，不自带额外结算规则。'],
+    '灵宠类型': ['种族标签', '生灵、跃族、元素等是灵宠分类，用于构筑识别或被其他效果引用；具体联动以物品文案为准。'],
+    '品质': ['物品阶级', '青铜、白银、黄金、钻石是由低到高的品质。详情面板会显示当前品质对应的实际数值。'],
+    '能量': ['战斗资源', '灵宠在战斗中获得的资源，当前上限为 12。部分灵宠能力或技能会消耗能量触发“爆能”。'],
+    '爆能': ['能量强化', '当所属灵宠有足够能量时，消耗标注的能量并执行技能的爆能效果。“0 / 2”表示当前 0 点，需要 2 点。'],
+    '弹药': ['使用次数', '有弹药的技能每次使用会消耗 1 枚；归零后暂时无法使用，需由装填效果补充。'],
+    '倒计时': ['延迟触发', '显示“当前值 / 初始值”。归零时执行文案中的倒计时效果，完成后按该技能规则重置。'],
+    '护盾': ['临时承伤', '当前模拟中，普通伤害先消耗护盾，再由防御抵消剩余伤害。剧毒、灼烧等特定状态伤害可能无视护盾。'],
+    '护甲': ['护盾类效果', '当前战斗沙盒将“获得护甲”与“获得护盾”都结算到护盾池中；日志会显示实际增加值。'],
+    '防御': ['固定减伤', '护盾结算后，每点防御抵消 1 点剩余普通伤害。当前规则中，灵宠受到攻击后防御通常会 -1。'],
+    '点燃': ['火焰状态', '点燃会给目标累积灼烧值。已有灼烧的目标被攻击技能命中时，会追加等同层数的灼烧伤害，然后按 10% 衰减。'],
+    '灼烧': ['点燃累积值', '灼烧是“点燃”留在目标身上的当前层数。被攻击技能命中时追加同等数值的灼烧伤害，再按 10% 衰减。'],
+    '淬毒': ['叠加剧毒', '淬毒用于给目标增加剧毒层数。目标自己的回合结束时，受到等同层数的剧毒伤害，然后层数 -2。'],
+    '剧毒': ['持续伤害层数', '剧毒是“淬毒”留在目标身上的当前层数。目标自己回合结束时受到等同层数的伤害，然后层数 -2。'],
+    '再生': ['回合治疗', '拥有再生的灵宠在自己回合结束时，恢复等同于当前再生值的生命。'],
+    '亢奋': ['正面状态', '下一次获得正面数值时效果加倍，或在受到负面数值时将其减半；成功修正后消耗 1 层。'],
+    '衰弱': ['负面状态', '下一次获得正面数值时效果减半，或在受到负面数值时将其加倍；成功修正后消耗 1 层。'],
+    '麻痹': ['失效概率', '每层麻痹使技能使用时有 7% 概率失效；回合结束时层数 -1。'],
+    '封刃': ['攻击限制', '封刃期间不能使用攻击类技能；辅助或被动效果仍按自身条件检查。'],
+    '禁足': ['移动限制', '禁足期间无法在部署阶段移动，但不会因此直接禁止技能。'],
+    '结算一步': ['慢速回放', '每点一次只推进一个技能或阶段，适合对照右侧战斗日志学习触发顺序。']
+  };
   const VALUE_PATTERN = /(攻击|点燃|淬毒|护盾|治疗|再生)\s*(\d+)(\+?)|(\d+)\s*伤害/g;
   function parseValueEntries(text) {
     const entries = [];
@@ -124,6 +151,49 @@
     VALUE_PATTERN.lastIndex = 0;
     return entries;
   }
+  const EFFECT_CATEGORY_RULES = [
+    ['伤害', /攻击\s*\d|\d+\s*伤害|伤害|造成攻击|发起攻击|武技后.*攻击/],
+    ['火', /点燃|灼烧|火伤/],
+    ['毒', /淬毒|剧毒|毒伤/],
+    ['护盾', /护盾|护甲/],
+    ['治疗', /治疗|再生|恢复.*生命|吸血/],
+    ['充能', /充能|爆能|能量/],
+    ['弹药', /弹药|装填|填充/],
+    ['暴击', /暴击/],
+    ['亢奋', /亢奋/],
+    ['衰弱', /衰弱/],
+    ['麻痹', /麻痹/],
+    ['封刃', /封刃/],
+    ['禁足', /禁足/],
+    ['位移', /移动|拖拽|击退|拉到|换位/],
+    ['倒计时', /倒计时/],
+    ['成长', /获得.*(?:伤害|攻击|防御|护盾).*(?:\+|提升)|伤害值?提升|攻击力?提升|防御提升/]
+  ];
+  function skillEffectText(skill) {
+    if (!skill) return '';
+    return [skill.ability, skill.effect, skill.role, skill.combo, skill.range].filter(Boolean).join(' ');
+  }
+  function skillEffectCategories(skill) {
+    const text = skillEffectText(skill);
+    const categories = EFFECT_CATEGORY_RULES.filter(([, pattern]) => pattern.test(text)).map(([label]) => label);
+    return categories.length ? categories.slice(0, 3) : ['机制'];
+  }
+  const skillEffectLabel = skill => skillEffectCategories(skill).join(' / ');
+  const skillLabelByName = name => {
+    const catalog = SKILL_CATALOG.find(item => item.name === name || item.name === SKILL_ALIAS[name]);
+    return catalog ? skillEffectLabel(catalog) : String(name || '机制');
+  };
+  function publicSkillText(text) {
+    let result = String(text == null ? '' : text);
+    const names = Array.from(new Set(SKILL_CATALOG.map(item => item.name).concat(Object.keys(SKILL_ALIAS)))).sort((a, b) => b.length - a.length);
+    names.forEach(name => { result = result.split(esc(name)).join(esc(skillLabelByName(name))); });
+    return result;
+  }
+  function skillChoiceLabel(skill) {
+    const ability = String(skill && skill.ability || '').trim();
+    const range = String(skill && skill.range || '').trim();
+    return [skillEffectLabel(skill), ability, range].filter(Boolean).join('｜');
+  }
   const isAttackSkill = skill => /攻击\d|伤害\d|点燃|淬毒|造成伤害/.test((skill && skill.ability || '') + ' ' + (skill && skill.effect || ''));
   const PASSIVE_SKILL_NAMES = new Set(['连抓', '锋锐鳞片', '饮血倒刺']);
   const isPassiveSkill = skill => !!skill && (PASSIVE_SKILL_NAMES.has(skill.name) || /被动/.test((skill.effect || '') + (skill.type || '')));
@@ -134,36 +204,38 @@
 
   const defaultConfig = {
     player: {
-      level: 1, income: 20, history: 0, heroHp: 360,
+      level: 1, income: 20, history: 0, heroHp: 240,
       pets: [
         {name:'烁德童子', quality:'青铜'},
         {name:'花椒蟹', quality:'白银'},
         {name:'白蔷薇', quality:'白银'},
-        {name:'', quality:'青铜'}
+        {name:'通灵钟', quality:'白银'}
       ],
       skills: [
         {name:'蓄能', quality:'青铜', owner:0},
+        {name:'元气弹', quality:'白银', owner:0},
         {name:'引火', quality:'青铜', owner:1},
-        {name:'天火咒', quality:'青铜', owner:0},
-        {name:'火中取栗', quality:'青铜', owner:1},
+        {name:'鞭炮', quality:'青铜', owner:1},
         {name:'乱抓', quality:'白银', owner:2},
-        {name:'元气弹', quality:'白银', owner:2}
+        {name:'天火咒', quality:'青铜', owner:3}
       ]
     },
     enemy: {
-      level: 2, income: 30, history: 0, heroHp: 360,
+      level: 1, income: 20, history: 0, heroHp: 240,
       pets: [
-        {name:'饿狼', quality:'青铜'},
-        {name:'岩豚', quality:'青铜'},
+        {name:'蕈章', quality:'青铜'},
+        {name:'鲛人抢手', quality:'白银'},
+        {name:'黑玫瑰', quality:'白银'},
         {name:'沼泽鼠', quality:'白银'},
-        {name:'赤精鱼', quality:'青铜'}
       ],
       skills: [
-        {name:'啃咬', quality:'青铜', owner:0},
-        {name:'利爪', quality:'青铜', owner:1},
-        {name:'毒钩', quality:'青铜', owner:2},
-        {name:'火球', quality:'青铜', owner:3},
-        {name:'轻击', quality:'青铜', owner:0}
+        {name:'披甲', quality:'青铜', owner:0},
+        {name:'毒钩', quality:'青铜', owner:0},
+        {name:'蜈蚣锁', quality:'青铜', owner:1},
+        {name:'蜷缩', quality:'青铜', owner:1},
+        {name:'泰诺地龙', quality:'白银', owner:2},
+        {name:'毒雾', quality:'青铜', owner:3},
+        {name:'疗愈术', quality:'青铜', owner:3}
       ]
     }
   };
@@ -178,6 +250,7 @@
     selectedId: 'p1',
     selectedSkill: null,
     skillInfoId: null,
+    unitInfoId: null,
     playerCursor: 0,
     enemyCursor: 0,
     dragSkill: null,
@@ -381,13 +454,13 @@
   function log(text, kind = 'info', meta = 'SYSTEM') {
     state.events += 1;
     state.roundEvents += 1;
-    state.logs.push({round: state.round, action: state.action, text, kind, meta});
+    state.logs.push({round: state.round, action: state.action, text: publicSkillText(text), kind, meta});
     if (state.logs.length > 150) state.logs.shift();
     renderLog();
   }
 
   function trace(text, kind = 'trigger') {
-    state.trace.push({text, kind});
+    state.trace.push({text: publicSkillText(text), kind});
     if (state.trace.length > 8) state.trace.shift();
   }
 
@@ -427,6 +500,39 @@
       finished: '战斗结束'
     };
     return map[state.phase] || state.phase;
+  }
+
+  function termButton(name, label) {
+    if (!TERM_DICTIONARY[name]) return esc(label || name);
+    return '<button type="button" class="term-link" data-term="' + esc(name) + '">' + esc(label || name) + ' <b>ⓘ</b></button>';
+  }
+
+  function renderActionGuide() {
+    const guide = $('#action-guide');
+    if (!guide) return;
+    let title = '部署阶段：先看、再摆、后结算';
+    let tone = 'ready';
+    let steps = [
+      ['1', '点灵宠', '查询属性并选中'],
+      ['2', '点亮起空格', '移动己方灵宠'],
+      ['3', '拖技能卡', '调整结算顺序'],
+      ['4', '开始战斗', '或结算一步']
+    ];
+    if (state.phase === 'resolving' || state.phase === 'start-resolving') {
+      title = '己方结算中：选择慢速检查或自动播放';
+      tone = 'resolving';
+      steps = [['1', '结算一步', '看清下一个技能'], ['2', '自动播放', '连续推进战斗'], ['3', '点灵宠/技能', '随时查看当前数值']];
+    } else if (state.phase === 'enemy-position' || state.phase === 'enemy-resolving') {
+      title = '对手回合：走位与目标由稳定 AI 决定';
+      tone = 'watching';
+      steps = [['1', '结算一步', '观察对手下一个技能'], ['2', '看战斗日志', '确认来源、目标和结果'], ['3', '点物品', '查看双方当前详情']];
+    } else if (state.phase === 'finished') {
+      title = '战斗已结束：可复盘或换一套阵容';
+      tone = 'finished';
+      steps = [['1', '看战斗日志', '按时序复盘胜负'], ['2', '点物品', '检查终局状态'], ['3', '重置/战斗配置', '再开一局']];
+    }
+    guide.className = 'action-guide ' + tone;
+    guide.innerHTML = '<div class="action-guide-title"><span>你现在可以</span><strong>' + esc(title) + '</strong></div><div class="action-guide-steps">' + steps.map(step => '<div class="action-guide-step"><i>' + step[0] + '</i><span><b>' + esc(step[1]) + '</b><small>' + esc(step[2]) + '</small></span></div>').join('') + '</div><button type="button" class="action-guide-help" data-open-guide>不懂术语？</button>';
   }
 
   function renderFlow() {
@@ -683,6 +789,7 @@
         state.selectedId = unit.id;
         state.selectedSkill = null;
         renderAll();
+        openUnitInfo(unit);
       });
       cell.appendChild(node);
     });
@@ -717,22 +824,35 @@
       card.className = 'skill-card ' + skill.size + (state.selectedSkill && state.selectedSkill.id === skill.id ? ' active-skill' : '') + (locked ? ' skill-locked' : '');
       card.draggable = state.phase === 'position';
       card.dataset.id = skill.id;
+      card.tabIndex = 0;
+      card.setAttribute('role', 'button');
+      const effectLabel = skillEffectLabel(skill);
+      card.setAttribute('aria-label', effectLabel + '，点击查看完整详情');
       const ammo = skill.ammoMax ? skill.ammo + ' / ' + skill.ammoMax : '—';
       const cd = skill.baseCountdown ? skill.countdown + ' / ' + skill.baseCountdown : '—';
       const explosion = explosionLabel(skill);
       const role = /攻击|伤害|点燃|淬毒/.test(skill.ability + skill.effect) ? '主要输出' : /能量|装填|治疗|护甲|亢奋|防御/.test(skill.ability + skill.effect) ? '启动/扳机' : '体系运转';
       const actualValues = valueSummary(skill, owner);
       card.innerHTML =
-        '<div class="skill-card-top"><div><div class="skill-name">' + esc(skill.name) + '</div><div class="skill-owner">' + esc(owner ? owner.name : '未分配') + '</div></div><span class="skill-type">' + esc(skill.quality) + '</span></div>' +
+        '<div class="skill-card-top"><div><div class="skill-name">' + esc(effectLabel) + '</div><div class="skill-owner">' + esc(owner ? owner.name : '未分配') + '</div></div><span class="skill-type">' + esc(skill.quality) + '</span></div>' +
         '<div class="skill-actual-values"><span>当前实际数值</span><strong>' + esc(actualValues) + '</strong></div>' +
         '<div class="skill-ability"><span>原始能力</span> ' + esc(skill.ability || '效果技能') + '</div>' +
-        '<div class="skill-meta"><div class="meta-item">能力<b>' + esc(skill.ability || '效果') + '</b></div><div class="meta-item">范围<b>' + esc(skill.range) + '</b></div><div class="meta-item">弹药<b class="ammo">' + esc(ammo) + '</b></div><div class="meta-item">倒计时<b class="countdown">' + esc(cd) + '</b></div></div>' +
+        '<div class="skill-meta"><div class="meta-item"><span>能力</span><b>' + esc(skill.ability || '效果') + '</b></div><div class="meta-item">' + termButton('攻击范围', '范围') + '<b>' + esc(skill.range) + '</b></div><div class="meta-item">' + termButton('弹药') + '<b class="ammo">' + esc(ammo) + '</b></div><div class="meta-item">' + termButton('倒计时') + '<b class="countdown">' + esc(cd) + '</b></div></div>' +
         (explosion ? '<div class="skill-explosion">' + esc(explosion) + '</div>' : '') +
-        '<div class="skill-footer"><span>' + (index + 1) + ' · ' + SIZE_LABEL[skill.size] + ' · ' + skill.slots + '格</span><span class="skill-availability">' + esc(role + ' · ' + availability) + '</span></div>';
-      card.addEventListener('click', () => {
+        '<div class="skill-footer"><span>' + (index + 1) + ' · ' + termButton('技能格数', SIZE_LABEL[skill.size] + ' · ' + skill.slots + '格') + '</span><span class="skill-availability">' + esc(role + ' · ' + availability) + '</span></div><div class="item-click-cue">点击看完整详情</div>';
+      const inspectSkill = event => {
+        if (event && event.target && event.target.closest('[data-term]')) return;
         state.selectedSkill = skill;
         state.selectedId = skill.owner;
         renderAll();
+        openSkillInfo(skill);
+      };
+      card.addEventListener('click', inspectSkill);
+      card.addEventListener('keydown', event => {
+        if (event.target.closest('[data-term]')) return;
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        inspectSkill(event);
       });
       card.addEventListener('dragstart', () => {
         state.dragSkill = skill.id;
@@ -762,7 +882,7 @@
         ? '<div class="detail-label">当前实际数值与构成</div><div class="value-breakdown-list">' + valueDetails.map(item => '<div class="value-breakdown"><div><span>' + esc(item.label) + '</span><strong>' + item.value + '</strong></div><p>' + esc(valueFormula(item)) + '</p></div>').join('') + '</div>'
         : '';
       detail.innerHTML =
-        '<div class="focus-card"><div class="focus-top"><div class="focus-icon skill">' + esc(skill.name.slice(0, 1)) + '</div><div><div class="focus-name">' + esc(skill.name) + '</div><div class="focus-sub">' + esc(skill.quality) + ' · ' + esc(SIZE_LABEL[skill.size]) + ' · 所属 ' + esc(owner ? owner.name : '未分配') + '</div></div></div><p class="focus-effect">' + esc(skill.effect) + '</p></div>' +
+        '<div class="focus-card"><div class="focus-top"><div class="focus-icon skill">' + esc(skillEffectLabel(skill).slice(0, 1)) + '</div><div><div class="focus-name">' + esc(skillEffectLabel(skill)) + '</div><div class="focus-sub">' + esc(skill.quality) + ' · ' + esc(SIZE_LABEL[skill.size]) + ' · 所属 ' + esc(owner ? owner.name : '未分配') + '</div></div></div><p class="focus-effect">' + esc(skill.effect) + '</p></div>' +
         valueHtml +
         '<div class="detail-label">基础信息</div><div class="stat-grid"><div class="stat-box"><span>能力</span><strong>' + esc(skill.ability || '效果') + '</strong></div><div class="stat-box"><span>攻击范围</span><strong>' + esc(skill.range) + '</strong></div><div class="stat-box"><span>技能格数</span><strong>' + skill.slots + ' 格</strong></div><div class="stat-box"><span>资源</span><strong>' + esc(skill.ammoMax ? '弹药 ' + skill.ammo + '/' + skill.ammoMax : skill.baseCountdown ? '倒计时 ' + skill.countdown + '/' + skill.baseCountdown : '无') + '</strong></div></div>' +
         '<div class="detail-label">标签</div><div class="tag-row">' + (skill.tags.length ? skill.tags : ['技能']).map(tag => '<span class="tag">' + esc(tag) + '</span>').join('') + '</div>' +
@@ -783,10 +903,10 @@
     if (unit.abilityCountdownMax) abilityTags.push('能力倒计时（' + (unit.abilityCountdown == null ? unit.abilityCountdownMax : unit.abilityCountdown) + ' / ' + unit.abilityCountdownMax + '）');
     const abilityHtml = '<div class="detail-label">灵宠能力</div><p class="focus-effect">' + esc(unit.effect || '暂无简述') + '</p>' + (abilityTags.length ? '<div class="tag-row">' + abilityTags.map(tag => '<span class="tag explosion-tag">' + esc(tag) + '</span>').join('') + '</div>' : '');
     const equippedHtml = equipped.length
-      ? equipped.map(item => '<button type="button" class="detail-skill-link" data-skill-info="' + esc(item.id) + '"><span>' + esc(item.name) + '<small>' + esc(valueSummary(item, unit)) + '</small></span><small>' + esc(explosionLabel(item) || '查看技能详情') + '</small></button>').join('')
+      ? equipped.map(item => '<button type="button" class="detail-skill-link" data-skill-info="' + esc(item.id) + '"><span>' + esc(skillEffectLabel(item)) + '<small>' + esc(valueSummary(item, unit)) + '</small></span><small>' + esc(explosionLabel(item) || '查看技能详情') + '</small></button>').join('')
       : '<span class="tag">未装备</span>';
     const explosionHtml = explosionSkills.length
-      ? '<div class="detail-label">能力爆能消耗</div><div class="tag-row">' + explosionSkills.map(item => '<span class="tag explosion-tag">' + esc(item.name) + ' ' + esc(explosionLabel(item)) + '</span>').join('') + '</div>'
+      ? '<div class="detail-label">能力爆能消耗</div><div class="tag-row">' + explosionSkills.map(item => '<span class="tag explosion-tag">' + esc(skillEffectLabel(item)) + ' ' + esc(explosionLabel(item)) + '</span>').join('') + '</div>'
       : '';
     detail.innerHTML =
       '<div class="focus-card"><div class="focus-top"><div class="focus-icon ' + (unit.side === 'enemy' ? 'enemy' : 'ally') + '">' + esc(unit.icon) + '</div><div><div class="focus-name">' + esc(unit.name) + '</div><div class="focus-sub">' + sideLabel(unit.side) + '灵宠 · ' + esc(unit.quality) + ' · 坐标 ' + coord(unit.pos) + '</div></div></div><p class="focus-effect">' + esc(unit.effect || cat.effect) + '</p></div>' +
@@ -808,13 +928,17 @@
     const owner = ownerOf(skill);
     const explosion = explosionLabel(skill);
     const valueDetails = skillValueBreakdowns(skill, owner);
-    $('#skill-info-title').textContent = skill.name + ' · 技能详情';
+    const availability = skillAvailability(skill);
+    const role = /(攻击|伤害|点燃|淬毒)/.test(skill.ability + skill.effect) ? '输出' : /(能量|装填|治疗|护甲|护盾|亢奋|防御)/.test(skill.ability + skill.effect) ? '辅助/启动' : '体系运转';
+    const timing = isPassiveSkill(skill) ? '被动技能：只在文案条件满足时自动触发。' : skill.baseCountdown ? '倒计时技能：轮到它时检查进度，归零后执行对应效果。' : '主动技能：轮到技能栏中的位置时自动选择合法目标。';
+    $('#skill-info-title').textContent = skillEffectLabel(skill) + ' · 技能详情';
     $('#skill-info-content').innerHTML =
-      '<div class="skill-info-summary"><div class="focus-icon skill">' + esc(skill.name.slice(0, 1)) + '</div><div><strong>' + esc(skill.name) + '</strong><small>' + esc(skill.quality) + ' · ' + esc(SIZE_LABEL[skill.size]) + ' · 所属灵宠：' + esc(owner ? owner.name : '未分配') + '</small></div></div>' +
+      '<div class="skill-info-summary"><div class="focus-icon skill">' + esc(skillEffectLabel(skill).slice(0, 1)) + '</div><div><strong>' + esc(skillEffectLabel(skill)) + '</strong><small>' + esc(skill.quality) + ' · ' + esc(SIZE_LABEL[skill.size]) + ' · 所属灵宠：' + esc(owner ? owner.name : '未分配') + '</small></div></div>' +
       '<p class="skill-info-effect">' + esc(skill.effect) + '</p>' +
+      '<div class="newbie-reading"><span>新手解读</span><strong>' + esc(role) + ' · ' + esc(availability) + '</strong><p>' + esc(timing) + '<br>目标：' + esc(skill.range || '以技能文案为准') + (skill.explosionCost ? '<br>爆能：所属灵宠至少需要 ' + skill.explosionCost + ' 点能量。' : '') + '</p></div>' +
       (valueDetails.length ? '<div class="detail-label">当前实际数值与构成</div><div class="value-breakdown-list">' + valueDetails.map(item => '<div class="value-breakdown"><div><span>' + esc(item.label) + '</span><strong>' + item.value + '</strong></div><p>' + esc(valueFormula(item)) + '</p></div>').join('') + '</div>' : '') +
-      '<div class="skill-info-grid"><div><span>能力</span><b>' + esc(skill.ability || '效果技能') + '</b></div><div><span>攻击范围</span><b>' + esc(skill.range) + '</b></div><div><span>占用格数</span><b>' + skill.slots + ' 格</b></div><div><span>弹药</span><b>' + esc(skill.ammoMax ? skill.ammo + ' / ' + skill.ammoMax : '—') + '</b></div><div><span>倒计时</span><b>' + esc(skill.baseCountdown ? skill.countdown + ' / ' + skill.baseCountdown : '—') + '</b></div><div><span>爆能消耗</span><b>' + esc(explosion || '—') + '</b></div></div>' +
-      '<div class="detail-label">技能标签</div><div class="tag-row">' + (skill.tags.length ? skill.tags : ['技能']).map(tag => '<span class="tag">' + esc(tag) + '</span>').join('') + '</div>';
+      '<div class="skill-info-grid"><div><span>能力</span><b>' + esc(skill.ability || '效果技能') + '</b></div><div><span>' + termButton('攻击范围') + '</span><b>' + esc(skill.range) + '</b></div><div><span>' + termButton('技能格数', '占用格数') + '</span><b>' + skill.slots + ' 格</b></div><div><span>' + termButton('弹药') + '</span><b>' + esc(skill.ammoMax ? skill.ammo + ' / ' + skill.ammoMax : '—') + '</b></div><div><span>' + termButton('倒计时') + '</span><b>' + esc(skill.baseCountdown ? skill.countdown + ' / ' + skill.baseCountdown : '—') + '</b></div><div><span>' + termButton('爆能', '爆能消耗') + '</span><b>' + esc(explosion || '—') + '</b></div></div>' +
+      '<div class="detail-label">技能标签·点击可查术语</div><div class="tag-row">' + (skill.tags.length ? skill.tags : ['技能']).map(tag => /^(short|medium|long|短篇|中篇|长篇)$/.test(tag) ? termButton('技能格数', tag) : /^(?:武技|术法|心法|暗器|器灵|符箓|陷阱|丹药)$/.test(tag) ? termButton('技能类型', tag) : '<span class="tag">' + esc(tag) + '</span>').join('') + '</div>';
     modal.hidden = false;
   }
 
@@ -828,6 +952,72 @@
     state.skillInfoId = null;
     const modal = $('#skill-info-modal');
     if (modal) modal.hidden = true;
+  }
+
+  function statusTermHtml(unit) {
+    return stateTags(unit).map(tag => {
+      const name = tag.split(' ')[0];
+      return TERM_DICTIONARY[name] ? termButton(name, tag) : '<span class="tag">' + esc(tag) + '</span>';
+    }).join('');
+  }
+
+  function renderUnitInfoModal() {
+    const modal = $('#unit-info-modal');
+    const unit = unitById(state.unitInfoId);
+    if (!modal || !unit) {
+      if (modal) modal.hidden = true;
+      return;
+    }
+    const equipped = skillList(unit.side).filter(skill => skill.owner === unit.id);
+    const canMove = unit.side === 'player' && state.phase === 'position' && !unit.dead && !unit.rooted;
+    $('#unit-info-title').textContent = '灵宠详情：' + unit.name;
+    $('#unit-info-content').innerHTML =
+      '<div class="skill-info-summary"><div class="focus-icon ' + (unit.side === 'enemy' ? 'enemy' : 'ally') + '">' + esc(unit.icon) + '</div><div><strong>' + esc(unit.name) + '</strong><small>' + sideLabel(unit.side) + ' · ' + esc(unit.quality) + ' · 坐标 ' + coord(unit.pos) + '</small></div></div>' +
+      '<p class="skill-info-effect">' + esc(unit.effect || '暂无能力说明') + '</p>' +
+      '<div class="newbie-reading"><span>你现在能做什么</span><strong>' + (canMove ? '可移动' : unit.side === 'enemy' ? '只读查看' : '当前阶段不可移动') + '</strong><p>' + (canMove ? '关闭详情后，点击棋盘上亮起的青绿色空格即可移动。' : unit.side === 'enemy' ? '敌方灵宠由 AI 走位和选择目标，你仍可查看它的状态与技能。' : '走位只在己方部署阶段开放。') + '</p></div>' +
+      '<div class="skill-info-grid"><div><span>生命</span><b>' + unit.hp + ' / ' + unit.maxHp + '</b></div><div><span>攻击</span><b>' + unit.atk + '</b></div><div><span>' + termButton('防御') + '</span><b>' + unit.def + '</b></div><div><span>' + termButton('护盾') + '</span><b>' + unit.shield + '</b></div><div><span>' + termButton('能量') + '</span><b>' + unit.energy + ' / ' + unit.maxEnergy + '</b></div><div><span>当前位置</span><b>' + coord(unit.pos) + '</b></div></div>' +
+      '<div class="detail-label">当前状态·点击可查术语</div><div class="tag-row">' + statusTermHtml(unit) + '</div>' +
+      '<div class="detail-label">灵宠标签</div><div class="tag-row">' + (String(unit.tags || '').split(/[，,、\s]+/).filter(Boolean).map(tag => /^(?:生灵|跃族|元素)$/.test(tag) ? termButton('灵宠类型', tag) : '<span class="tag">' + esc(tag) + '</span>').join('') || '<span class="tag">暂无标签</span>') + '</div>' +
+      '<div class="detail-label">装备技能·点击继续查看</div><div class="detail-skill-list">' + (equipped.length ? equipped.map(skill => '<button type="button" class="detail-skill-link" data-unit-skill="' + esc(skill.id) + '"><span>' + esc(skillEffectLabel(skill)) + '<small>' + esc(valueSummary(skill, unit)) + '</small></span><small>查看详情 →</small></button>').join('') : '<p class="detail-empty">未装备技能</p>') + '</div>';
+    modal.hidden = false;
+  }
+
+  function openUnitInfo(unit) {
+    if (!unit) return;
+    state.unitInfoId = unit.id;
+    renderUnitInfoModal();
+  }
+
+  function closeUnitInfo() {
+    state.unitInfoId = null;
+    const modal = $('#unit-info-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function renderGuide(focusTerm) {
+    const grid = $('#glossary-grid');
+    if (!grid) return;
+    grid.innerHTML = Object.entries(TERM_DICTIONARY).map(([term, info]) => '<article class="glossary-card' + (term === focusTerm ? ' focused' : '') + '" data-guide-term="' + esc(term) + '"><span>' + esc(info[0]) + '</span><h4>' + esc(term) + '</h4><p>' + esc(info[1]) + '</p></article>').join('');
+    const focus = $('#guide-focus');
+    if (focusTerm && TERM_DICTIONARY[focusTerm]) {
+      focus.hidden = false;
+      focus.innerHTML = '<span>你刚才查询的术语</span><strong>' + esc(focusTerm) + '</strong><p>' + esc(TERM_DICTIONARY[focusTerm][1]) + '</p>';
+    } else {
+      focus.hidden = true;
+      focus.innerHTML = '';
+    }
+  }
+
+  function openGuide(term) {
+    closeSkillInfo();
+    closeUnitInfo();
+    closeConfigInfo();
+    renderGuide(term);
+    $('#guide-modal').hidden = false;
+  }
+
+  function closeGuide() {
+    $('#guide-modal').hidden = true;
   }
 
   function renderLog() {
@@ -860,6 +1050,7 @@
 
   function renderAll() {
     renderTop();
+    renderActionGuide();
     renderFlow();
     renderTeamContext();
     renderBoard();
@@ -1568,7 +1759,7 @@
     state.selectedId = skill.owner;
     const owner = ownerOf(skill);
     const label = sideLabel(side) + '技能 ' + skill.name;
-    setBanner(skill.name, (owner ? owner.name : '未分配') + ' · Step ' + state.action);
+    setBanner(skillEffectLabel(skill), (owner ? owner.name : '未分配') + ' · Step ' + state.action);
     if (!owner || owner.dead || owner.hp <= 0) {
       log('<strong>' + esc(skill.name) + '</strong> 所属灵宠已阵亡，跳过本次技能。', 'warn', 'SKIP');
       trace(skill.name + ' 跳过', 'trigger');
@@ -2032,7 +2223,7 @@
     return '<option value="">空置</option>' + PET_CATALOG.map(item => '<option value="' + esc(item.name) + '"' + (item.name === selected ? ' selected' : '') + '>' + esc(item.name) + '</option>').join('');
   }
   function skillOptions(selected) {
-    return SKILL_CATALOG.map(item => '<option value="' + esc(item.name) + '"' + (item.name === selected ? ' selected' : '') + '>' + esc(item.name) + '</option>').join('');
+    return SKILL_CATALOG.map(item => '<option value="' + esc(item.name) + '"' + (item.name === selected ? ' selected' : '') + '>' + esc(skillChoiceLabel(item)) + '</option>').join('');
   }
   function qualityOptions(selected) {
     return QUALITY.map(item => '<option value="' + item + '"' + (item === selected ? ' selected' : '') + '>' + item + '</option>').join('');
@@ -2078,7 +2269,9 @@
     const item = info.item || {};
     const catalog = info.kind === 'pet' ? petCatalog(item.name) : skillCatalog(item.name);
     const quality = item.quality || catalog.tier || '青铜';
-    $('#config-info-title').textContent = (info.kind === 'pet' ? '灵宠详情：' : '技能详情：') + (item.name || '未配置');
+    $('#config-info-title').textContent = info.kind === 'pet'
+      ? '灵宠详情：' + (item.name || '未配置')
+      : '技能详情：' + skillEffectLabel(previewSkill(item, previewOwner(null)));
     if (info.kind === 'pet') {
       const scale = qualityScale(catalog, quality);
       const hp = Math.max(1, Math.round((Number(qualityField(catalog, quality, 'hp', catalog.hp)) || 0) * scale));
@@ -2097,7 +2290,7 @@
       const owner = previewOwner(ownerItem);
       const preview = previewSkill(item, owner);
       $('#config-info-content').innerHTML =
-        '<div class="skill-info-summary"><div class="focus-icon skill">' + esc(iconOf(item.name)) + '</div><div><strong>' + esc(item.name || '未配置') + '</strong><small>' + esc(quality) + ' · ' + esc(SIZE_LABEL[preview.size]) + ' · 所属灵宠：' + esc(ownerItem ? ownerItem.name : '未分配') + '</small></div></div>' +
+        '<div class="skill-info-summary"><div class="focus-icon skill">' + esc(skillEffectLabel(preview).slice(0, 1)) + '</div><div><strong>' + esc(skillEffectLabel(preview)) + '</strong><small>' + esc(quality) + ' · ' + esc(SIZE_LABEL[preview.size]) + ' · 所属灵宠：' + esc(ownerItem ? ownerItem.name : '未分配') + '</small></div></div>' +
         '<p class="skill-info-effect">' + esc(preview.effect || '暂无效果说明') + '</p>' +
         configValueHtml(item, owner) +
         '<div class="skill-info-grid"><div><span>能力</span><b>' + esc(preview.ability || '效果技能') + '</b></div><div><span>攻击范围</span><b>' + esc(preview.range || '—') + '</b></div><div><span>占用格数</span><b>' + preview.slots + ' 格</b></div><div><span>技能类型</span><b>' + esc(preview.type || '技能') + '</b></div><div><span>品质</span><b>' + esc(quality) + '</b></div><div><span>爆能消耗</span><b>' + (preview.explosionCost || '—') + '</b></div><div><span>倒计时</span><b>' + (preview.baseCountdown ? preview.countdownStart + ' / ' + preview.baseCountdown : '—') + '</b></div></div>';
@@ -2144,7 +2337,8 @@
 
   function shopItem(item, kind, index) {
     const cost = itemCost(item);
-    return '<div class="shop-item"><div><strong>' + esc(item.name) + '</strong><small>' + esc(item.quality) + ' · ' + cost + '金币</small></div><div class="setup-item-actions"><button type="button" class="setup-info-btn" data-action="config-item-info" data-source="shop" data-kind="' + kind + '" data-index="' + index + '">详情</button><button type="button" class="tool-btn" data-action="buy" data-kind="' + kind + '" data-index="' + index + '">购买</button></div></div>';
+    const displayName = kind === 'skill' ? skillEffectLabel(skillCatalog(item.name)) : item.name;
+    return '<div class="shop-item clickable-item" role="button" tabindex="0" aria-label="' + esc(displayName) + '，点击查看详情" data-action="config-item-info" data-source="shop" data-kind="' + kind + '" data-index="' + index + '"><div><strong>' + esc(displayName) + '</strong><small>' + esc(item.quality) + ' · ' + cost + '金币</small><em>点击物品看详情</em></div><div class="setup-item-actions"><button type="button" class="setup-info-btn" data-action="config-item-info" data-source="shop" data-kind="' + kind + '" data-index="' + index + '">详情</button><button type="button" class="tool-btn" data-action="buy" data-kind="' + kind + '" data-index="' + index + '">购买</button></div></div>';
   }
 
   function inventoryHtml() {
@@ -2154,7 +2348,8 @@
       const equipTarget = entry.kind === 'skill'
         ? '<select class="equip-owner" data-equip-owner="' + entry.index + '">' + ownerOptions(state.setupDraft.player.pets, '') + '</select>'
         : '';
-      return '<div class="shop-item"><div><strong>' + esc(entry.item.name) + '</strong><small>' + esc(entry.item.quality) + ' · 可卖 ' + Math.floor(itemCost(entry.item) / 2) + '金币</small></div><div class="setup-item-actions">' + equipTarget + '<button type="button" class="setup-info-btn" data-action="config-item-info" data-source="inventory" data-kind="' + entry.kind + '" data-index="' + entry.index + '">详情</button><button type="button" class="tool-btn" data-action="equip" data-kind="' + entry.kind + '" data-index="' + entry.index + '">装备</button><button type="button" class="tool-btn" data-action="sell" data-kind="' + entry.kind + '" data-index="' + entry.index + '">出售</button></div></div>';
+      const displayName = entry.kind === 'skill' ? skillEffectLabel(skillCatalog(entry.item.name)) : entry.item.name;
+      return '<div class="shop-item clickable-item" role="button" tabindex="0" aria-label="' + esc(displayName) + '，点击查看详情" data-action="config-item-info" data-source="inventory" data-kind="' + entry.kind + '" data-index="' + entry.index + '"><div><strong>' + esc(displayName) + '</strong><small>' + esc(entry.item.quality) + ' · 可卖 ' + Math.floor(itemCost(entry.item) / 2) + '金币</small><em>点击物品看详情</em></div><div class="setup-item-actions">' + equipTarget + '<button type="button" class="setup-info-btn" data-action="config-item-info" data-source="inventory" data-kind="' + entry.kind + '" data-index="' + entry.index + '">详情</button><button type="button" class="tool-btn" data-action="equip" data-kind="' + entry.kind + '" data-index="' + entry.index + '">装备</button><button type="button" class="tool-btn" data-action="sell" data-kind="' + entry.kind + '" data-index="' + entry.index + '">出售</button></div></div>';
     }).join('');
   }
 
@@ -2310,6 +2505,7 @@
   $('#auto-btn').addEventListener('click', toggleAuto);
   $('#reset-btn').addEventListener('click', resetAll);
   $('#config-btn').addEventListener('click', openSetup);
+  $('#guide-btn').addEventListener('click', () => openGuide());
   $('#close-setup').addEventListener('click', closeSetup);
   $('#cancel-setup').addEventListener('click', closeSetup);
   $('#apply-setup').addEventListener('click', applySetup);
@@ -2318,6 +2514,12 @@
     if (event.target.type === 'number') setupChange(event.target);
   });
   $('#setup-body').addEventListener('click', setupClick);
+  $('#setup-body').addEventListener('keydown', event => {
+    const target = event.target.closest('.clickable-item[data-action]');
+    if (!target || event.target !== target || event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    setupClick({target});
+  });
   $('#detail-content').addEventListener('click', event => {
     const target = event.target.closest('[data-skill-info]');
     if (target) openSkillInfo(skillById(target.dataset.skillInfo));
@@ -2330,10 +2532,36 @@
   $('#config-info-modal').addEventListener('click', event => {
     if (event.target.id === 'config-info-modal') closeConfigInfo();
   });
+  $('#close-unit-info').addEventListener('click', closeUnitInfo);
+  $('#unit-info-modal').addEventListener('click', event => {
+    if (event.target.id === 'unit-info-modal') closeUnitInfo();
+  });
+  $('#unit-info-content').addEventListener('click', event => {
+    const target = event.target.closest('[data-unit-skill]');
+    if (!target) return;
+    const skill = skillById(target.dataset.unitSkill);
+    closeUnitInfo();
+    if (skill) openSkillInfo(skill);
+  });
+  $('#close-guide').addEventListener('click', closeGuide);
+  $('#guide-modal').addEventListener('click', event => {
+    if (event.target.id === 'guide-modal') closeGuide();
+  });
+  document.addEventListener('click', event => {
+    const guide = event.target.closest('[data-open-guide]');
+    if (guide) {
+      openGuide();
+      return;
+    }
+    const term = event.target.closest('[data-term]');
+    if (term) openGuide(term.dataset.term);
+  });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       closeSkillInfo();
       closeConfigInfo();
+      closeUnitInfo();
+      closeGuide();
     }
   });
   $('#clear-log').addEventListener('click', () => {

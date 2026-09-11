@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101923">
   <title>灵宠战斗模拟器 · 逐步结算</title>
-  <link rel="stylesheet" href="battle.css?v=20260911b">
+  <link rel="stylesheet" href="battle.css?v=20260911c">
 </head>
 <body>
   <header class="topbar">
@@ -14,19 +14,20 @@
       <span>灵宠战斗模拟器<small>TACTICAL RESOLUTION LAB</small></span>
     </a>
     <div class="battle-state"><span class="status-dot"></span><span id="battle-state-text">准备就绪</span><span class="divider"></span><span>第 <b id="round-number">1</b> 回合</span><span class="divider"></span><span id="turn-side-label">己方回合</span><span class="divider"></span><span>行动 <b id="action-number">0</b></span></div>
-    <div class="top-actions"><button id="config-btn" class="ghost-btn">战斗配置</button><button id="reset-btn" class="ghost-btn">重置</button><button id="run-btn" class="primary-btn">开始战斗</button></div>
+    <div class="top-actions"><button id="guide-btn" class="ghost-btn guide-btn">？ 新手指引·术语</button><button id="config-btn" class="ghost-btn">战斗配置</button><button id="reset-btn" class="ghost-btn">重置</button><button id="run-btn" class="primary-btn">开始战斗</button></div>
   </header>
 
   <main class="battle-layout">
     <aside class="side-panel detail-panel">
       <div class="panel-title"><div><span class="kicker">INSPECTOR</span><h2>当前详情</h2></div><span class="live-chip">LIVE</span></div>
       <div id="detail-content" class="detail-content"></div>
-      <div class="hint-box"><span>操作提示</span><p>点击灵宠查看属性；点击技能查看效果。选中灵宠后点击棋盘空格即可移动。</p></div>
+      <div class="hint-box"><span>操作提示</span><p>点灵宠或技能会直接打开详情。部署阶段选中己方灵宠，再点亮起的空格即可移动。</p><button type="button" class="hint-link" data-open-guide>看完整操作与术语解释 →</button></div>
     </aside>
 
     <section class="arena-panel">
       <div class="arena-head"><div><span class="kicker">BATTLEFIELD / 06 × 05</span><h1>逐步结算战场</h1></div><div class="arena-tools"><button id="step-btn" class="tool-btn">结算一步 <span>→</span></button><button id="auto-btn" class="tool-btn">自动播放</button></div></div>
-      <div class="legend"><span><i class="legend-dot ally"></i>己方</span><span><i class="legend-dot enemy"></i>敌方</span><span><i class="legend-square selected"></i>当前目标</span><span><i class="legend-square range"></i>攻击范围</span><span class="legend-note">回合开始 → 操作 → 技能结算 → 回合结束</span></div>
+      <section id="action-guide" class="action-guide" aria-live="polite"></section>
+      <div class="legend"><span><i class="legend-dot ally"></i>己方</span><span><i class="legend-dot enemy"></i>敌方</span><span><i class="legend-square selected"></i>当前选中</span><button type="button" class="legend-term" data-term="攻击范围"><i class="legend-square range"></i>攻击范围 <b>ⓘ</b></button><span class="legend-note">回合开始 → 部署走位 → 技能结算 → 回合结束</span></div>
       <div id="turn-flow" class="turn-flow" aria-label="回合流程"></div>
       <div id="team-context" class="team-context"></div>
       <div id="board-wrap" class="board-wrap">
@@ -67,7 +68,22 @@
       <div id="config-info-content" class="skill-info-content"></div>
     </section>
   </div>
+  <div id="unit-info-modal" class="skill-info-modal" hidden>
+    <section class="skill-info-dialog" role="dialog" aria-modal="true" aria-labelledby="unit-info-title">
+      <div class="skill-info-head"><div><span class="kicker">PET INSPECTOR</span><h2 id="unit-info-title">灵宠详情</h2></div><button id="close-unit-info" class="icon-btn" title="关闭灵宠详情">×</button></div>
+      <div id="unit-info-content" class="skill-info-content"></div>
+    </section>
+  </div>
+  <div id="guide-modal" class="skill-info-modal" hidden>
+    <section class="skill-info-dialog guide-dialog" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+      <div class="skill-info-head"><div><span class="kicker">FIRST BATTLE GUIDE</span><h2 id="guide-title">新手操作与术语速查</h2></div><button id="close-guide" class="icon-btn" title="关闭新手指引">×</button></div>
+      <div class="guide-content">
+        <section class="quick-start"><span class="guide-section-label">30 秒开始第一场</span><ol><li><b>点灵宠</b><span>查看属性并选中它</span></li><li><b>点亮起的空格</b><span>在部署阶段移动己方灵宠</span></li><li><b>点技能卡</b><span>查看实际数值、范围和触发条件</span></li><li><b>开始战斗</b><span>然后用“结算一步”看清每次变化</span></li></ol></section>
+        <section><div class="guide-heading"><div><span class="guide-section-label">GAME TERMS</span><h3>游戏术语</h3></div><p>页面内看到 <b>ⓘ</b> 的词也可直接点击查询。</p></div><div id="guide-focus" class="guide-focus" hidden></div><div id="glossary-grid" class="glossary-grid"></div></section>
+      </div>
+    </section>
+  </div>
   <script src="graph-data.js"></script>
-  <script src="battle-v2.js?v=20260911b"></script>
+  <script src="battle-v2.js?v=20260911c"></script>
 </body>
 </html>
