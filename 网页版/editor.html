@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#173c32">
+  <title>灵宠图鉴 · 数值编辑器</title>
+  <link rel="stylesheet" href="editor.css">
+  <script src="graph-data.js" defer></script>
+  <script src="data-store.js" defer></script>
+  <script src="editor.js" defer></script>
+</head>
+<body>
+  <header class="workbench-bar">
+    <a class="workbench-brand" href="index.html"><span>灵</span><b>灵宠图鉴<small>CREATURE &amp; SKILL CODEX</small></b></a>
+    <div class="workbench-context"><i></i><span id="sync-summary">读取新数值.xlsx</span></div>
+    <nav aria-label="工作台导航"><a href="index.html">机制图谱</a><a href="battle.html">战斗模拟器 ↗</a></nav>
+  </header>
+
+  <main class="workbench">
+    <aside class="library-panel">
+      <div class="panel-heading"><span>CODEX / 图鉴</span><strong id="item-count">0</strong></div>
+      <label class="library-search"><span aria-hidden="true">⌕</span><input id="catalog-search" type="search" placeholder="搜索名称、标签、效果" aria-label="搜索图鉴"></label>
+      <div class="kind-tabs" role="group" aria-label="图鉴类型">
+        <button data-kind="全部" aria-pressed="false">全部</button>
+        <button data-kind="灵兽" aria-pressed="false">灵宠</button>
+        <button data-kind="技能" class="active" aria-pressed="true">技能</button>
+      </div>
+      <div class="list-caption"><span id="result-label">技能列表</span><div class="list-actions"><button id="new-pet" type="button">＋ 灵宠</button><button id="new-skill" type="button">＋ 技能</button></div></div>
+      <div id="catalog-list" class="catalog-list" role="listbox" aria-label="灵宠与技能"></div>
+    </aside>
+
+    <section class="preview-panel">
+      <div class="preview-heading">
+        <div><span>LIVE PREVIEW</span><h1 id="preview-title">技能详情</h1></div>
+        <a id="source-link" href="source/新数值.xlsx" download>下载表格原件 ↗</a>
+      </div>
+      <article id="item-preview" class="item-preview"></article>
+      <section class="data-bridge">
+        <div><span class="bridge-kicker">DATA BRIDGE</span><h2>编辑数据流</h2></div>
+        <div class="bridge-flow">
+          <div><b>01</b><span>新数值.xlsx</span><small>图鉴基线</small></div><i>→</i>
+          <div class="active"><b>02</b><span>编辑工作副本</span><small>当前浏览器</small></div><i>→</i>
+          <div><b>03</b><span>战斗模拟器</span><small>配置中可选择</small></div>
+        </div>
+        <p>保存后立即同步到同一浏览器里的图鉴和战斗模拟器。需要回填 Excel 时，可导出全量 CSV 或编辑补丁 JSON。</p>
+      </section>
+    </section>
+
+    <aside class="editor-panel">
+      <div class="editor-heading"><div><span>EDITOR / 数值设计</span><h2 id="editor-title">编辑技能</h2></div><span id="save-state" class="save-state">未修改</span></div>
+      <form id="item-form">
+        <div class="shared-fields">
+          <label class="field"><span id="item-name-label">技能名称</span><input name="name" required maxlength="40"></label>
+          <label class="field"><span>起始品质</span><select name="tier"><option>青铜</option><option>白银</option><option>黄金</option><option>钻石</option></select></label>
+        </div>
+        <div class="quality-head"><span>品质层数值</span><small>逐档编辑并分别保存</small></div>
+        <div id="quality-tabs" class="quality-tabs" role="tablist" aria-label="品质"></div>
+        <label class="field full tag-field"><span>标签名称 <small>使用逗号分隔</small></span><input name="词条" placeholder="生灵，召唤物，火焰"><div id="tag-preview" class="tag-preview"></div></label>
+        <div id="skill-fields" class="form-grid kind-fields">
+          <label class="field"><span>能力</span><input name="能力" placeholder="例如：攻击12+"></label>
+          <label class="field"><span>防御</span><input name="skill-defense" inputmode="decimal" placeholder="0"></label>
+          <label class="field full"><span>射程 / 目标</span><input name="射程/目标" placeholder="例如：正前方第一个敌人"></label>
+          <label class="field full"><span>效果 <small>可自由输入完整规则文本</small></span><textarea name="效果" rows="7" placeholder="主动输入技能效果、触发条件与限制"></textarea></label>
+          <label class="field"><span>定位</span><input name="定位" placeholder="例如：核心输出"></label>
+        </div>
+        <div id="pet-fields" class="form-grid kind-fields" hidden>
+          <label class="field"><span>生命值</span><input name="hp" inputmode="decimal" placeholder="100"></label>
+          <label class="field"><span>攻击</span><input name="攻击" inputmode="decimal" placeholder="5"></label>
+          <label class="field"><span>防御</span><input name="pet-defense" inputmode="decimal" placeholder="0"></label>
+          <label class="field"><span>套路定位</span><input name="套路定位" placeholder="例如：增益辅助"></label>
+          <label class="field full"><span>效果 <small>可自由输入完整规则文本</small></span><textarea name="一句话效果" rows="6" placeholder="主动输入灵宠效果、触发条件与限制"></textarea></label>
+          <label class="field full"><span>升级理由</span><textarea name="升级理由" rows="3" placeholder="说明不同品质的成长与设计意图"></textarea></label>
+        </div>
+        <div class="form-grid common-details">
+          <label class="field full"><span>主要配合对象</span><input name="主要配合对象" placeholder="可选"></label>
+          <label class="field"><span>套路</span><input name="套路" placeholder="例如：点燃流"></label>
+          <label class="field"><span>原型 / 备注</span><input name="原型" placeholder="可选"></label>
+        </div>
+        <div class="editor-note" id="editor-note">已有条目来自表格基线。保存会建立本地覆盖，不会改写原始 Excel 文件。</div>
+        <div class="form-actions"><button id="reset-item" type="button" class="secondary">撤销本地修改</button><button type="submit" class="primary">保存并同步模拟器</button></div>
+        <button id="duplicate-item" type="button" class="duplicate">复制为新条目</button>
+      </form>
+      <section class="transfer-box">
+        <div><span>DATA TRANSFER</span><h3>表格与备份</h3></div>
+        <div class="transfer-actions"><button id="export-pet-csv" type="button">导出灵宠 CSV</button><button id="export-skill-csv" type="button">导出技能 CSV</button><button id="export-json" type="button">导出编辑补丁</button><button id="import-json" type="button">导入补丁</button></div>
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+      </section>
+    </aside>
+  </main>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

@@ -23,11 +23,17 @@ for i in d['items']:
   t=upgrade[2 if pet else 1]
   if t in rank:assert rank[t]>=rank[i['tier']]
 lookup={i['id']:i for i in d['items']}
+source_rows={(s.title,row_index):' '.join(str(v) for v in row if v is not None) for s in w for row_index,row in enumerate(s.values,1)}
 for m in d['mechanisms']:
  for r in m['rules']:
-  i=lookup[r['itemId']]
-  assert r['item']==i['name'] and r['source']==i['source']
-  assert r['condition'] in i['effect'] and r['result'] in i['effect']
+  if r.get('itemId'):
+   i=lookup[r['itemId']]
+   assert r['item']==i['name'] and r['source']==i['source']
+   assert r['condition'] in i['effect'] and r['result'] in i['effect']
+  else:
+   source=r.get('source')
+   assert source and (source['sheet'],source['row']) in source_rows
+   assert r.get('sourceText') and r['sourceText'] in source_rows[(source['sheet'],source['row'])]
 for ex in d['examples']:
  names=[ex['pet'],*ex['skills']]
  assert all(any(i['name']==n for i in d['items']) for n in names)

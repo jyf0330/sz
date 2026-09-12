@@ -11,17 +11,9 @@
  const avatar=i=>`<span class="item-avatar ${i.kind==='灵兽'?'pet':''}" aria-hidden="true">${E(i.name[0])}</span>`;
  const tierClass=i=>i.tier==='白银'?'silver':i.tier==='黄金'?'gold':'';
  function announce(s){$('#announcement').textContent=s;}
- function renderRuleDetail(rule){
-  const source=rule&&rule.source?rule.source:null;
-  const title=mechanism?mechanism.name:'机制规则';
-  $('#detail').innerHTML=`<div class="detail-topline"><div class="detail-avatar" aria-hidden="true">${E(mechanism?mechanism.symbol:'机')}</div><span>● 机制规则 · 已固定</span></div><h2 class="detail-name">${E(title)}</h2><div class="badges"><span class="badge tier">机制</span><span class="badge">用户最新口径</span></div><div class="detail-section"><h3>结算规则</h3><p>${E(rule&&rule.result||'')}</p></div>${rule&&rule.condition?`<div class="detail-section"><h3>触发条件</h3><p>${E(rule.condition)}</p></div>`:''}${rule&&(rule.displaySourceText||rule.sourceText)?`<div class="evidence-box"><strong>数值表对应机制</strong>${E(rule.displaySourceText||rule.sourceText)}</div>`:''}${source?`<div class="source-box"><b>新数值.xlsx</b><br>${E(source.sheet)} · 第 ${source.row} 行<br>本图谱关系已按当前机制口径补充展示。</div>`:''}`;
-  $('#unpin').hidden=!pinned;
- }
- function restoreSelectedDetail(){if(selected)renderDetail(byId.get(selected));else{$('#detail').innerHTML='';$('#unpin').hidden=true;}}
  function setSelected(i,pin=false,open=false,rule=null){
-  selected=i?i.id:null;pinned=pin;evidence=rule;
-  if(i)renderDetail(i);else if(rule)renderRuleDetail(rule);
-  document.querySelectorAll('.flow-row,.catalog-card').forEach(el=>el.classList.toggle('selected',!!i&&el.dataset.itemId===i.id));
+  selected=i.id;pinned=pin;evidence=rule;renderDetail(i);
+  document.querySelectorAll('.flow-row,.catalog-card').forEach(el=>el.classList.toggle('selected',el.dataset.itemId===i.id));
   if(open&&compact())$('#inspector').classList.add('open');
  }
  function section(k,v){return `<section class="detail-section"><h3>${E(k)}</h3><p class="${empty(v)?'empty':''}">${E(value(v))}</p></section>`;}
@@ -60,14 +52,11 @@
  function renderGraph(){
   $('#graph-rows').innerHTML=mechanism.rules.map((r,k)=>{
    const i=byId.get(r.itemId);
-   const itemName=i?i.name:(r.item||mechanism.name);
-   const itemNode=i?`<button class="flow-item" data-inspect="${i.id}" aria-label="${E(i.name)}，查看最低品质详情">${avatar(i)}<span><strong>${E(i.name)}</strong><small>${E(i.kind)} · ${E(i.tier)}</small></span></button>`:`<div class="flow-item flow-generic"><span class="item-avatar" aria-hidden="true">${E(mechanism.symbol)}</span><span><strong>${E(itemName)}</strong><small>机制规则 · 用户最新口径</small></span></div>`;
-   const source=r.source?`${E(r.source.sheet)} · 第 ${r.source.row} 行 ↗`:'规则补充';
-   return `<div class="flow-row ${selected===r.itemId&&i?'selected':''}" data-item-id="${E(r.itemId||'')}" data-rule="${r.id}"><div class="flow-condition"><span class="node-label">${r.condition?'WHEN / 条件原文':'CONTEXT / 效果说明'}</span><span class="condition-text ${r.condition?'':'generic'}">${E(r.condition|| (i?(i.kind==='技能'?'技能效果':'灵兽特性'):'机制规则'))}</span></div>${arrow('first',r.condition?'满足条件':'查看')}${itemNode}${arrow('second','效果')}<button class="flow-result" data-evidence="${r.id}" aria-label="查看${E(itemName)}关系的原表依据"><span class="node-label">THEN / 效果原文</span><span class="result-text">${E(r.result)}</span><span class="source-line">${source}</span></button></div>`;
+   return `<div class="flow-row ${selected===i.id?'selected':''}" data-item-id="${i.id}" data-rule="${r.id}"><div class="flow-condition"><span class="node-label">${r.condition?'WHEN / 条件原文':'CONTEXT / 效果说明'}</span><span class="condition-text ${r.condition?'':'generic'}">${E(r.condition|| (i.kind==='技能'?'技能效果':'灵兽特性'))}</span></div>${arrow('first',r.condition?'满足条件':'查看')}<button class="flow-item" data-inspect="${i.id}" aria-label="${E(i.name)}，查看最低品质详情">${avatar(i)}<span><strong>${E(i.name)}</strong><small>${E(i.kind)} · ${E(i.tier)}</small></span></button>${arrow('second','效果')}<button class="flow-result" data-evidence="${r.id}" aria-label="查看${E(i.name)}关系的原表依据"><span class="node-label">THEN / 效果原文</span><span class="result-text">${E(r.result)}</span><span class="source-line">${E(i.source.sheet)} · 第 ${i.source.row} 行 ↗</span></button></div>`;
   }).join('');
   $('#rule-count').textContent=`${mechanism.rules.length} 条关键关系`;
   connectItems($('#graph-rows'));
-  $('#graph-rows').querySelectorAll('[data-evidence]').forEach(b=>b.addEventListener('click',()=>{const r=mechanism.rules.find(r=>r.id===b.dataset.evidence);setSelected(r.itemId?byId.get(r.itemId):null,true,true,r);announce('已显示当前关系的原文依据');}));
+  $('#graph-rows').querySelectorAll('[data-evidence]').forEach(b=>b.addEventListener('click',()=>{const r=mechanism.rules.find(r=>r.id===b.dataset.evidence);setSelected(byId.get(r.itemId),true,true,r);announce('已显示当前关系的原文依据');}));
   $('#mechanism-note').textContent=mechanism.note;
   $('#related-items').innerHTML=related().map(i=>`<button class="related-chip" data-inspect="${i.id}"><i></i>${E(i.name)}</button>`).join('');connectItems($('#related-items'));
   requestAnimationFrame(fit);
@@ -105,12 +94,12 @@
  $('#catalog-tab').addEventListener('click',()=>{if(scope==='examples'){scope='all';updateHeader();}setMode('catalog');});
  $('#search').addEventListener('input',e=>{query=e.target.value.trim().toLowerCase();if(scope==='examples'){scope='all';updateHeader();}setMode('catalog');});
  $('#kind-filters').addEventListener('click',e=>{const b=e.target.closest('[data-kind]');if(!b)return;kind=b.dataset.kind;document.querySelectorAll('[data-kind]').forEach(el=>{el.classList.toggle('active',el===b);el.setAttribute('aria-pressed',String(el===b));});renderCatalog();});
- $('#unpin').addEventListener('click',()=>{pinned=false;evidence=null;restoreSelectedDetail();});
+ $('#unpin').addEventListener('click',()=>{pinned=false;evidence=null;renderDetail(byId.get(selected));});
  $('#close-detail').addEventListener('click',()=>$('#inspector').classList.remove('open'));
  $('#zoom-in').addEventListener('click',()=>{zoom=Math.min(2,zoom+.15);applyZoom();});$('#zoom-out').addEventListener('click',()=>{zoom=Math.max(.5,zoom-.15);applyZoom();});$('#fit').addEventListener('click',fit);
  $('#expand').addEventListener('click',()=>{const on=document.body.classList.toggle('expanded');$('#expand').textContent=on?'⛶ 收起':'⛶ 展开';$('#expand').setAttribute('aria-label',on?'收起关系图':'展开关系图');requestAnimationFrame(fit);});
  $('#tooltip').addEventListener('pointerenter',()=>clearTimeout(hideTimer));$('#tooltip').addEventListener('pointerleave',laterHide);
- document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTip();$('#inspector').classList.remove('open');if(document.body.classList.contains('expanded'))$('#expand').click();if(pinned){pinned=false;evidence=null;restoreSelectedDetail();}}if(e.key==='/'&&!['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('#search').focus();}});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTip();$('#inspector').classList.remove('open');if(document.body.classList.contains('expanded'))$('#expand').click();if(pinned){pinned=false;evidence=null;renderDetail(byId.get(selected));}}if(e.key==='/'&&!['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('#search').focus();}});
  new ResizeObserver(()=>{if(!document.body.classList.contains('expanded'))fit();}).observe($('.main'));
  const byName=new Map(D.items.map(i=>[i.name,i]));let currentExample=0,exampleStep=0;
  function exampleRole(i){return mode==='examples'?(D.examples[currentExample]?.roles[i.name]||''):'';}

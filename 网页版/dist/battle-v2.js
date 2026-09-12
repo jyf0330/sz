@@ -109,22 +109,22 @@
     }
     return fallback;
   };
-  const numberFor = (text, fallback) => parseFirst(text, [/攻击(\d+)/, /伤害(\d+)/, /点燃(\d+)/, /淬毒(\d+)/, /覆雪(\d+)/, /结霜(\d+)/, /治疗(\d+)/, /护甲(\d+)/], fallback);
-  const VALUE_LABELS = {damage: '伤害', burn: '点燃', poison: '淬毒', frost: '覆雪', shield: '护盾', heal: '治疗', regen: '再生'};
-  const VALUE_PATTERN = /(攻击|点燃|淬毒|覆雪|结霜|护盾|治疗|再生)\s*(\d+)(\+?)|(\d+)\s*伤害/g;
+  const numberFor = (text, fallback) => parseFirst(text, [/攻击(\d+)/, /伤害(\d+)/, /点燃(\d+)/, /淬毒(\d+)/, /治疗(\d+)/, /护甲(\d+)/], fallback);
+  const VALUE_LABELS = {damage: '伤害', burn: '点燃', poison: '淬毒', shield: '护盾', heal: '治疗', regen: '再生'};
+  const VALUE_PATTERN = /(攻击|点燃|淬毒|护盾|治疗|再生)\s*(\d+)(\+?)|(\d+)\s*伤害/g;
   function parseValueEntries(text) {
     const entries = [];
     const source = String(text || '');
     let match;
     while ((match = VALUE_PATTERN.exec(source))) {
       const label = match[1] || '伤害';
-      const kind = label === '攻击' || label === '伤害' ? 'damage' : ({点燃:'burn', 淬毒:'poison', 覆雪:'frost', 结霜:'frost', 护盾:'shield', 治疗:'heal', 再生:'regen'}[label]);
+      const kind = label === '攻击' || label === '伤害' ? 'damage' : ({点燃:'burn', 淬毒:'poison', 护盾:'shield', 治疗:'heal', 再生:'regen'}[label]);
       entries.push({kind, label: VALUE_LABELS[kind], base: Number(match[2] || match[4] || 0), plus: !!match[3]});
     }
     VALUE_PATTERN.lastIndex = 0;
     return entries;
   }
-  const isAttackSkill = skill => /攻击\d|伤害\d|点燃|淬毒|覆雪|结霜|霜冻|造成伤害/.test((skill && skill.ability || '') + ' ' + (skill && skill.effect || ''));
+  const isAttackSkill = skill => /攻击\d|伤害\d|点燃|淬毒|造成伤害/.test((skill && skill.ability || '') + ' ' + (skill && skill.effect || ''));
   const PASSIVE_SKILL_NAMES = new Set(['连抓', '锋锐鳞片', '饮血倒刺']);
   const isPassiveSkill = skill => !!skill && (PASSIVE_SKILL_NAMES.has(skill.name) || /被动/.test((skill.effect || '') + (skill.type || '')));
   const isMartialSkill = skill => !!skill && !isPassiveSkill(skill) && /武技/.test((skill.type || '') + ' ' + (skill.tags || ''));
@@ -236,7 +236,6 @@
       shield: 0,
       burn: 0,
       poison: 0,
-      frost: 0,
       excited: 0,
       weak: 0,
       paralyze: 0,
@@ -279,7 +278,7 @@
     const countdownIndex = effectText.indexOf('倒计时');
     const explosionIndex = effectText.indexOf('爆能');
     const beforeCountdown = countdownIndex >= 0 ? effectText.slice(0, countdownIndex) : effectText;
-    const hasIndependentEffect = /造成伤害|点燃|淬毒|覆雪|结霜|霜冻|护盾|护甲|治疗|再生|获得|赋予|施加|充能|装填|提升|攻击/.test(beforeCountdown);
+    const hasIndependentEffect = /造成伤害|点燃|淬毒|护盾|护甲|治疗|再生|获得|赋予|施加|充能|装填|提升|攻击/.test(beforeCountdown);
     const ownerIndex = Math.min(Math.max(0, Number(item.owner) || 0), Math.max(0, pets.length - 1));
     return {
       id: (side === 'player' ? 'ps' : 'es') + (index + 1),
@@ -296,7 +295,7 @@
       effect,
       valueEntries: parseValueEntries(ability),
       tags: tagsText.split(/[，,、\s]+/).filter(Boolean),
-      role: role || (/(攻击|伤害|点燃|淬毒|覆雪|结霜|霜冻)/.test(ability + effect) ? '输出技能' : '体系运转'),
+      role: role || (/(攻击|伤害|点燃|淬毒)/.test(ability + effect) ? '输出技能' : '体系运转'),
       combo,
       ammoMax,
       ammo: ammoMax,
@@ -307,13 +306,12 @@
       explosionBeforeCountdown: explosionIndex >= 0 && countdownIndex >= 0 && explosionIndex < countdownIndex,
       countdownBeforeExplosion: explosionIndex >= 0 && countdownIndex >= 0 && countdownIndex < explosionIndex,
       countdownTailOnly: !!baseCountdown && !hasIndependentEffect,
-      explosionTailOnly: !!explosionCost && !/造成伤害|点燃|淬毒|覆雪|结霜|霜冻|护盾|护甲|治疗|再生|获得|赋予|施加|充能|装填|提升|攻击/.test(explosionIndex >= 0 ? effectText.slice(0, explosionIndex) : ''),
+      explosionTailOnly: !!explosionCost && !/造成伤害|点燃|淬毒|护盾|护甲|治疗|再生|获得|赋予|施加|充能|装填|提升|攻击/.test(explosionIndex >= 0 ? effectText.slice(0, explosionIndex) : ''),
       explosionAvailable: true,
       scale,
       damageBonus: 0,
       burnBonus: 0,
       poisonBonus: 0,
-      frostBonus: 0,
       shieldBonus: 0,
       healBonus: 0,
       regenBonus: 0,
@@ -409,7 +407,6 @@
     if (unit.dead) tags.push('待复活 ' + Math.max(0, (unit.reviveAt || state.round) - state.round) + '回合');
     if (unit.burn > 0) tags.push('灼烧 ' + unit.burn);
     if (unit.poison > 0) tags.push('剧毒 ' + unit.poison);
-    if (unit.frost > 0) tags.push('霜冻 ' + unit.frost);
     if (unit.shield > 0) tags.push('护盾 ' + unit.shield);
     if (unit.excited > 0) tags.push('亢奋 ' + unit.excited);
     if (unit.weak > 0) tags.push('衰弱 ' + unit.weak);
@@ -508,7 +505,7 @@
 
   function skillIsSupport(skill) {
     const text = (skill.ability || '') + (skill.effect || '') + (skill.range || '');
-    return /治疗|护甲|护盾|能量|装填|亢奋|攻击\+|防御\+|随机友方|我方/.test(text) && !/攻击\d|伤害\d|点燃|淬毒|覆雪|结霜|霜冻/.test(skill.ability || '');
+    return /治疗|护甲|护盾|能量|装填|亢奋|攻击\+|防御\+|随机友方|我方/.test(text) && !/攻击\d|伤害\d|点燃|淬毒/.test(skill.ability || '');
   }
 
   function targetsFor(skill, owner, side) {
@@ -591,7 +588,6 @@
       add('技能自身点燃提升', skill && !skill.preview && skill.burnBonus);
     }
     if (kind === 'poison') add('技能自身淬毒提升', skill && skill.poisonBonus);
-    if (kind === 'frost') add('技能自身覆雪提升', skill && skill.frostBonus);
     if (kind === 'shield') add('技能自身护盾提升', skill && skill.shieldBonus);
     if (kind === 'heal') add('技能自身治疗提升', skill && skill.healBonus);
     if (kind === 'regen') add('技能自身再生提升', skill && skill.regenBonus);
@@ -604,15 +600,15 @@
     let attack = 0;
     if (entry.plus && owner) {
       if (entry.kind === 'damage') attack = Math.max(0, Math.round(owner.atk));
-      else if (entry.kind === 'burn' || entry.kind === 'poison' || entry.kind === 'frost') {
-        const ratio = entry.kind === 'burn' || entry.kind === 'poison' || entry.kind === 'frost'
+      else if (entry.kind === 'burn' || entry.kind === 'poison') {
+        const ratio = entry.kind === 'burn' || entry.kind === 'poison'
           ? (skill.size === 'long' ? 3 : skill.size === 'medium' ? 2 : 1)
           : 0;
         attack = owner.atk > 0 ? Math.ceil(owner.atk * ratio / 4) : 0;
       } else attack = Math.max(0, Math.round(owner.atk));
     }
     const bonuses = valueBonusParts(skill, owner, entry.kind);
-    const value = Math.max((entry.kind === 'burn' || entry.kind === 'poison' || entry.kind === 'frost') ? 1 : 0, base + attack + bonuses.reduce((sum, part) => sum + part.value, 0));
+    const value = Math.max((entry.kind === 'burn' || entry.kind === 'poison') ? 1 : 0, base + attack + bonuses.reduce((sum, part) => sum + part.value, 0));
     return {kind: entry.kind, label: entry.label, base, attack, bonuses, value, plus: entry.plus};
   }
 
@@ -631,7 +627,7 @@
 
   function valueFormula(item) {
     const parts = ['技能基础 ' + item.base];
-    if (item.attack) parts.push('灵宠攻击 ' + item.attack + (item.kind === 'burn' || item.kind === 'poison' || item.kind === 'frost' ? '（按篇幅比例）' : ''));
+    if (item.attack) parts.push('灵宠攻击 ' + item.attack + (item.kind === 'burn' || item.kind === 'poison' ? '（按篇幅比例）' : ''));
     item.bonuses.forEach(part => parts.push(part.label + ' ' + (part.value > 0 ? '+' : '') + part.value));
     return parts.join(' + ') + ' = ' + item.value;
   }
@@ -725,7 +721,7 @@
       const ammo = skill.ammoMax ? skill.ammo + ' / ' + skill.ammoMax : '—';
       const cd = skill.baseCountdown ? skill.countdown + ' / ' + skill.baseCountdown : '—';
       const explosion = explosionLabel(skill);
-      const role = /攻击|伤害|点燃|淬毒|覆雪|结霜|霜冻/.test(skill.ability + skill.effect) ? '主要输出' : /能量|装填|治疗|护甲|亢奋|防御/.test(skill.ability + skill.effect) ? '启动/扳机' : '体系运转';
+      const role = /攻击|伤害|点燃|淬毒/.test(skill.ability + skill.effect) ? '主要输出' : /能量|装填|治疗|护甲|亢奋|防御/.test(skill.ability + skill.effect) ? '启动/扳机' : '体系运转';
       const actualValues = valueSummary(skill, owner);
       card.innerHTML =
         '<div class="skill-card-top"><div><div class="skill-name">' + esc(skill.name) + '</div><div class="skill-owner">' + esc(owner ? owner.name : '未分配') + '</div></div><span class="skill-type">' + esc(skill.quality) + '</span></div>' +
@@ -771,7 +767,7 @@
         valueHtml +
         '<div class="detail-label">基础信息</div><div class="stat-grid"><div class="stat-box"><span>能力</span><strong>' + esc(skill.ability || '效果') + '</strong></div><div class="stat-box"><span>攻击范围</span><strong>' + esc(skill.range) + '</strong></div><div class="stat-box"><span>技能格数</span><strong>' + skill.slots + ' 格</strong></div><div class="stat-box"><span>资源</span><strong>' + esc(skill.ammoMax ? '弹药 ' + skill.ammo + '/' + skill.ammoMax : skill.baseCountdown ? '倒计时 ' + skill.countdown + '/' + skill.baseCountdown : '无') + '</strong></div></div>' +
         '<div class="detail-label">标签</div><div class="tag-row">' + (skill.tags.length ? skill.tags : ['技能']).map(tag => '<span class="tag">' + esc(tag) + '</span>').join('') + '</div>' +
-        '<div class="detail-label">结算定位</div><p class="focus-effect">' + (/攻击|伤害|点燃|淬毒|覆雪|结霜|霜冻/.test(skill.ability + skill.effect) ? '主要输出：负责直接伤害或点燃/淬毒/覆雪命中。' : '启动/扳机或体系运转：负责提供资源、状态、增益或下一步触发条件。') + '</p>';
+        '<div class="detail-label">结算定位</div><p class="focus-effect">' + (/攻击|伤害|点燃|淬毒/.test(skill.ability + skill.effect) ? '主要输出：负责直接伤害或灼烧/剧毒命中。' : '启动/扳机或体系运转：负责提供资源、状态、增益或下一步触发条件。') + '</p>';
       return;
     }
     if (!unit) {
@@ -879,26 +875,6 @@
     $$('.cell.range,.cell.move-target,.unit.in-range').forEach(node => node.classList.remove('range', 'move-target', 'in-range'));
   }
 
-  function triggerFrostOnMove(unit, reason) {
-    if (!unit || unit.dead || unit.hp <= 0 || unit.frost <= 0) return;
-    const before = unit.frost;
-    const damage = before * 2;
-    log('<strong>' + esc(unit.name) + '</strong> 因' + esc(reason || '位置改变') + '触发霜冻：层数 ' + before + '，造成 ' + damage + ' 点霜冻伤害。', 'trigger', 'FROST MOVE');
-    damageUnit(null, unit, damage, {status:'霜冻', meta:'FROST MOVE'});
-    unit.frost = Math.ceil(before / 2);
-    log('<strong>' + esc(unit.name) + '</strong> 霜冻触发后层数减半：' + before + ' → ' + unit.frost + '（向上取整）。', 'trigger', 'FROST MOVE');
-    trace(unit.name + ' 霜冻 ' + before + '→' + unit.frost, 'trigger');
-  }
-
-  function moveUnit(unit, position, options = {}) {
-    if (!unit || unit.dead || !Array.isArray(position) || (unit.pos[0] === position[0] && unit.pos[1] === position[1])) return false;
-    const old = unit.pos.slice();
-    unit.pos = position.slice();
-    if (typeof options.message === 'function') log(options.message(old, unit.pos), 'trigger', options.meta || 'MOVE');
-    if (!options.skipFrost) triggerFrostOnMove(unit, options.reason || '位置改变');
-    return true;
-  }
-
   function handleCellClick(row, col) {
     const occupied = allUnits().find(unit => !unit.dead && unit.pos[0] === row && unit.pos[1] === col);
     if (occupied) {
@@ -917,16 +893,14 @@
       showToast(unit.name + ' 本回合处于禁足状态', true);
       return;
     }
+    const old = unit.pos.slice();
+    unit.pos = [row, col];
     const equipped = state.playerSkills.filter(skill => skill.owner === unit.id);
     state.selectedSkill = equipped.find(skill => isAttackSkill(skill) && skillAvailability(skill) === '可用')
       || equipped.find(skill => skillAvailability(skill) === '可用')
       || equipped[0]
       || null;
-    moveUnit(unit, [row, col], {
-      reason: '玩家移动',
-      meta: 'MOVE',
-      message: (old, next) => '<strong>' + esc(unit.name) + '</strong> 从 ' + coord(old) + ' 移动到 ' + coord(next) + '。'
-    });
+    log('<strong>' + esc(unit.name) + '</strong> 从 ' + coord(old) + ' 移动到 ' + coord(unit.pos) + '。', 'trigger', 'MOVE');
     renderAll();
   }
 
@@ -944,11 +918,9 @@
       || allUnits().some(unit => !unit.dead && unit.id !== target.id && unit.pos[0] === candidate[0] && unit.pos[1] === candidate[1]);
     const actionText = mode === 'pull' ? '拖拽' : '击退';
     if (!blocked) {
-      moveUnit(target, candidate, {
-        reason: skill.name + actionText,
-        meta: 'DISPLACEMENT',
-        message: (old, next) => '<strong>' + esc(skill.name) + '</strong> ' + actionText + ' <strong>' + esc(target.name) + '</strong>：' + coord(old) + ' → ' + coord(next) + '。'
-      });
+      const old = target.pos.slice();
+      target.pos = candidate;
+      log('<strong>' + esc(skill.name) + '</strong> ' + actionText + ' <strong>' + esc(target.name) + '</strong>：' + coord(old) + ' → ' + coord(candidate) + '。', 'trigger', 'DISPLACEMENT');
       trace(target.name + ' ' + actionText + '至 ' + coord(candidate), 'trigger');
       return;
     }
@@ -1241,7 +1213,6 @@
     unit.energy = 0;
     unit.burn = 0;
     unit.poison = 0;
-    unit.frost = 0;
     unit.shield = 0;
     unit.reviveAt = null;
     unit.pos = position;
@@ -1456,25 +1427,6 @@
     }
   }
 
-  function applyFrost(source, target, amount, reason) {
-    if (!target || target.dead) return;
-    const value = Math.max(1, Math.round(amount || 0));
-    const old = target.frost;
-    target.frost += value;
-    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得霜冻 +' + value + '，当前 ' + target.frost + '。', 'trigger', 'FROST');
-    trace(target.name + ' 霜冻 +' + value, 'trigger');
-    if (old > 0) {
-      const defenseBefore = Math.max(0, target.def);
-      const shieldBefore = Math.max(0, target.shield);
-      const defenseLoss = Math.floor(value / 2);
-      const shieldLoss = value * 3;
-      target.def = Math.max(0, target.def - defenseLoss);
-      target.shield = Math.max(0, target.shield - shieldLoss);
-      log('<strong>' + esc(target.name) + '</strong> 已有霜冻，覆雪额外削减防御 ' + defenseLoss + '（' + defenseBefore + ' → ' + target.def + '），护盾 ' + shieldLoss + '（' + shieldBefore + ' → ' + target.shield + '）。', 'warn', 'FROST PROC');
-      trace(target.name + ' 霜冻削防/护盾', 'trigger');
-    }
-  }
-
   function applyBurn(source, target, amount, reason, attackHit) {
     if (!target || target.dead) return;
     const value = Math.max(1, Math.round(amount || 0));
@@ -1483,7 +1435,7 @@
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得灼烧 +' + value + '，当前 ' + target.burn + '。', 'trigger', 'BURN');
     trace(target.name + ' 灼烧 +' + value, 'trigger');
     if (old > 0) {
-      damageUnit(source, target, value * 2, {status:'点燃', meta:'IGNITE PROC'});
+      damageUnit(source, target, value * 2, {status:'点燃', ignoreShield:true, meta:'IGNITE PROC'});
       log('目标已有灼烧，点燃额外造成 ' + value * 2 + ' 点伤害。', 'output', 'IGNITE PROC');
     }
     const crab = source && source.name === '花椒蟹' && !source.dead ? source : null;
@@ -1499,7 +1451,7 @@
   function triggerBurnOnHit(attacker, target, skill, damageBase) {
     if (!target || target.dead || target.burn <= 0) return 0;
     const burnDamage = target.burn;
-    damageUnit(attacker, target, burnDamage, {status:'灼烧', meta:'BURN PROC'});
+    damageUnit(attacker, target, burnDamage, {status:'灼烧', ignoreShield:true, meta:'BURN PROC'});
     target.burn = Math.max(1, Math.floor(target.burn * 0.9));
     log('<strong>' + esc(target.name) + '</strong> 被攻击技能命中，灼烧追加 ' + burnDamage + '，层数按10%衰减至 ' + target.burn + '。', 'trigger', 'BURN PROC');
     if (attacker && attacker.name === '白蔷薇') {
@@ -1793,9 +1745,6 @@
       && (!skill.explosionCost || explosion || !/爆能/.test(skill.effect))
       && regularEffectReady;
     const poisonSkill = /毒钩|毒雾|蜈蚣锁|寒蛇影|蛇影寒|泰诺地龙|毒腺/.test(skill.name) || /淬毒/.test(skill.ability);
-    const frostSkill = /覆雪|结霜/.test(skill.name + ' ' + skill.ability) && regularEffectReady;
-    const frostValue = valueEntriesOf(skill).find(entry => entry.kind === 'frost');
-    const directDamage = valueEntriesOf(skill).some(entry => entry.kind === 'damage') || /造成伤害/.test(skill.effect);
     const critical = attackSkill && regularEffectReady ? triggerCritical(owner, skill, targets) : false;
     const directTargets = targets.length ? targets : [owner];
     directTargets.forEach(target => {
@@ -1807,10 +1756,7 @@
       } else if (poisonSkill && regularEffectReady && target.side !== owner.side) {
         applyPoison(owner, target, genericAttackValue(skill, owner, 'poison'), skill.name + '淬毒');
       }
-      if (frostSkill && frostValue && attackSkill && target.side !== owner.side && target.hp > 0) {
-        applyFrost(owner, target, valueBreakdown(skill, owner, frostValue).value, skill.name + '覆雪');
-      }
-      if (directDamage && attackSkill && target.side !== owner.side && target.hp > 0 && regularEffectReady) {
+      if (attackSkill && target.side !== owner.side && target.hp > 0 && regularEffectReady) {
         for (let i = 0; i < multi; i += 1) {
           let value = genericAttackValue(skill, owner, 'damage');
           if (owner.name === '饿狼' && owner.firstMartialReady && /武技|攻击/.test(skill.type + skill.tags)) {
@@ -1936,11 +1882,9 @@
         const candidate = [Math.max(0, Math.min(ROWS - 1, enemy.pos[0] + dr)), Math.max(0, Math.min(COLS - 1, enemy.pos[1] + dc))];
         const occupied = allUnits().some(unit => !unit.dead && unit.id !== enemy.id && unit.pos[0] === candidate[0] && unit.pos[1] === candidate[1]);
         if (!occupied) {
-          moveUnit(enemy, candidate, {
-            reason: '敌方AI移动',
-            meta: 'AI MOVE',
-            message: (old, next) => '<strong>' + esc(enemy.name) + '</strong> AI 向最近目标移动：' + coord(old) + ' → ' + coord(next) + '。'
-          });
+          const old = enemy.pos.slice();
+          enemy.pos = candidate;
+          log('<strong>' + esc(enemy.name) + '</strong> AI 向最近目标移动：' + coord(old) + ' → ' + coord(candidate) + '。', 'trigger', 'AI MOVE');
         }
       } else {
         log('<strong>' + esc(enemy.name) + '</strong> 选择技能 <strong>' + esc(skill.name) + '</strong>，目标按范围内最低生命值确定。', 'trigger', 'AI SELECT');

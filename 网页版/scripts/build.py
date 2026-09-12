@@ -6,7 +6,10 @@ ROOT=Path(__file__).resolve().parents[2]
 OUT=ROOT/'网页版'
 w=openpyxl.load_workbook(ROOT/'新数值.xlsx',data_only=True)
 items=[]
+source_rows={}
 for s in w:
+ for row_index,row in enumerate(s.values,1):
+  source_rows[(s.title,row_index)]=' '.join(str(v) for v in row if v is not None)
  pet='宠物' in s.title
  if not pet and '技能' not in s.title:continue
  rows=list(s.values)
@@ -27,14 +30,21 @@ assert len(byname)==len(items)
 mechanisms=json.loads((OUT/'scripts/rules.json').read_text(encoding='utf-8'))
 for m in mechanisms:
  for i,r in enumerate(m['rules']):
-  item=byname[r['item']];r['itemId']=item['id'];r['id']=f'{m["id"]}-{i}'
-  # Each condition and displayed outcome comes from the named item's base effect verbatim.
-  for k in ['condition','result']:
-   if r[k]:assert r[k] in item['effect'],(m['id'],item['name'],k,r[k])
-  r['source']=item['source']
+  r['id']=f'{m["id"]}-{i}'
+  if r.get('item'):
+   item=byname[r['item']];r['itemId']=item['id']
+   # Each condition and displayed outcome comes from the named item's base effect verbatim.
+   for k in ['condition','result']:
+    if r[k]:assert r[k] in item['effect'],(m['id'],item['name'],k,r[k])
+   r['source']=item['source']
+  else:
+   r['itemId']=None
+   source=r.get('source')
+   assert source and (source['sheet'],source['row']) in source_rows,(m['id'],r['id'],'source')
+   if r.get('sourceText'):assert r['sourceText'] in source_rows[(source['sheet'],source['row'])],(m['id'],r['id'],'sourceText')
  for item in items:
   text=' '.join(str(item['fields'].get(k) or '') for k in ['词条','效果','一句话效果','能力'])
-  if any(k in text for k in m['keywords']) or any(r['itemId']==item['id'] for r in m['rules']):
+  if any(k in text for k in m['keywords']) or any(r.get('itemId')==item['id'] for r in m['rules']):
    item.setdefault('mechanisms',[]).append(m['id'])
 for item in items:item.setdefault('mechanisms',[])
 examples=json.loads((OUT/'scripts/examples.json').read_text(encoding='utf-8'))
