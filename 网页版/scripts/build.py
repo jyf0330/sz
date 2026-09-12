@@ -24,6 +24,9 @@ for s in w:
    if upgrade[tier_col] in ['青铜','白银','黄金','钻石']:
     upgrade_fields={str(h):v for h,v in zip(rows[0],upgrade) if h is not None}
     variants.append(dict(tier=upgrade[tier_col],fields=upgrade_fields,source={'sheet':s.title,'row':j}))
+  # 标签属于图鉴条目，而不是单独的品质数值。所有阶段统一读取起步品质标签。
+  base_tags=fields.get('词条')
+  for variant in variants:variant['fields']['词条']=base_tags
   items.append(dict(id=f'item-{len(items)+1}',name=str(row[col]),kind='灵兽' if pet else '技能',tier=row[tier_col],fields=fields,effect=row[7 if pet else 5],source={'sheet':s.title,'row':i},variants=variants))
 byname={x['name']:x for x in items}
 assert len(byname)==len(items)
@@ -53,8 +56,22 @@ for ex in examples:
  for step in ex['steps']:
   assert step['quote'] in byname[step['source']]['effect']
   assert all(n in [ex['pet'],*ex['skills']] for n in step['active'])
-meta={'itemCount':len(items),'petCount':sum(i['kind']=='灵兽' for i in items),'skillCount':sum(i['kind']=='技能' for i in items),'ruleCount':sum(len(m['rules']) for m in mechanisms),'mechanismCount':len(mechanisms),'sourceHashes':{f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest() for f in ['新数值.xlsx','交互关系.pdf']}}
-(OUT/'graph-data.js').write_text('window.ATLAS_DATA = '+json.dumps(dict(items=items,mechanisms=mechanisms,examples=examples,meta=meta),ensure_ascii=False)+';\n',encoding='utf-8')
+team_presets=json.loads((OUT/'scripts/team-presets.json').read_text(encoding='utf-8'))
+qualities={'青铜','白银','黄金','钻石'}
+for preset in team_presets:
+ assert preset['heroHp']==660,(preset['id'],'heroHp')
+ assert len(preset['pets'])==4,(preset['id'],'pets')
+ assert all(pet['name'] in byname and byname[pet['name']]['kind']=='灵兽' and pet['quality'] in qualities for pet in preset['pets'])
+ assert all(skill['name'] in byname and byname[skill['name']]['kind']=='技能' and skill['quality'] in qualities and 0<=skill['owner']<4 for skill in preset['skills'])
+ assert all(any(skill['owner']==index for skill in preset['skills']) for index in range(4)),(preset['id'],'unequipped pet')
+ slot_count=0
+ for skill in preset['skills']:
+  item=byname[skill['name']]
+  size_text=f"{item['fields'].get('词条') or ''} {item['effect'] or ''}"
+  slot_count+=3 if '长篇' in size_text else 2 if '中篇' in size_text else 1
+ assert slot_count==10,(preset['id'],'skill slots',slot_count)
+meta={'itemCount':len(items),'petCount':sum(i['kind']=='灵兽' for i in items),'skillCount':sum(i['kind']=='技能' for i in items),'ruleCount':sum(len(m['rules']) for m in mechanisms),'mechanismCount':len(mechanisms),'teamPresetCount':len(team_presets),'sourceHashes':{f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest() for f in ['新数值.xlsx','交互关系.pdf']}}
+(OUT/'graph-data.js').write_text('window.ATLAS_DATA = '+json.dumps(dict(items=items,mechanisms=mechanisms,examples=examples,teamPresets=team_presets,meta=meta),ensure_ascii=False)+';\n',encoding='utf-8')
 (OUT/'source-audit.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2),encoding='utf-8')
 for f in meta['sourceHashes']:shutil.copy2(ROOT/f,OUT/'source'/f)
 print(meta)

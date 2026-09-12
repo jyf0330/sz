@@ -7,7 +7,6 @@
   const clone = value => JSON.parse(JSON.stringify(value));
   const qualities = ['青铜', '白银', '黄金', '钻石'];
   const sharedBindings = [
-    {field: '词条', input: '词条'},
     {field: '主要配合对象', input: '主要配合对象'},
     {field: '套路', input: '套路'},
     {field: '原型', input: '原型'}
@@ -63,6 +62,11 @@
   function currentVariant(item) {
     const tier = quality || item.tier || '青铜';
     return (item.variants || []).find(variant => variant.tier === tier) || {tier, fields: {...item.fields, '品质': tier}, source: item.source};
+  }
+
+  function canonicalTags(item) {
+    const base = (item.variants || []).find(variant => variant.tier === item.tier);
+    return value(base && base.fields ? base.fields['词条'] : (item.fields || {})['词条'], '');
   }
 
   function isChanged(item) {
@@ -161,6 +165,12 @@
       const fallback = binding.numeric ? '0' : '';
       form.elements[binding.input].value = value(fields[binding.field], fallback);
     });
+    const tagInput = form.elements['词条'];
+    tagInput.value = canonicalTags(item);
+    tagInput.disabled = quality !== item.tier;
+    $('#tag-sync-note').textContent = tagInput.disabled
+      ? `沿用${item.tier}起步品质标签，请切换到${item.tier}修改`
+      : '修改后会同步到全部品质阶段';
     renderQualityTabs();
     renderTags();
     $('#reset-item').textContent = item.custom ? `删除这个新${pet ? '灵宠' : '技能'}` : '撤销本地修改';
@@ -210,7 +220,10 @@
       entry.fields = {...(entry.fields || {}), '品质': entry.tier};
       entry.fields[nameField] = entry.tier === nextTier ? draft.name : null;
     });
-    const baseVariant = draft.variants.find(entry => entry.tier === nextTier);
+    const baseVariant = ensureVariant(nextTier);
+    if (quality === nextTier && !form.elements['词条'].disabled) baseVariant.fields['词条'] = form.elements['词条'].value;
+    const tags = baseVariant.fields['词条'] == null ? '' : baseVariant.fields['词条'];
+    draft.variants.forEach(entry => { entry.fields['词条'] = tags; });
     draft.fields = clone(baseVariant.fields);
     draft.effect = baseVariant.fields[effectFieldFor(draft)] || '';
   }
@@ -473,7 +486,15 @@
   $('#new-skill').addEventListener('click', () => newItem('技能'));
   $('#item-form').addEventListener('submit', saveCurrent);
   $('#item-form').addEventListener('input', event => { if (event.target.name) { if (event.target.name === '词条') renderTags(); markDirty(); } });
-  $('#item-form').addEventListener('change', event => { if (event.target.name) markDirty(); });
+  $('#item-form').addEventListener('change', event => {
+    if (!event.target.name) return;
+    markDirty();
+    if (event.target.name === 'tier') {
+      quality = draft.tier;
+      renderEditor();
+      renderPreview();
+    }
+  });
   $('#reset-item').addEventListener('click', resetCurrent);
   $('#duplicate-item').addEventListener('click', () => { captureForm(); const item = selectedItem(); newItem(item.kind, item); });
   $('#export-pet-csv').addEventListener('click', () => exportCsv('灵兽'));

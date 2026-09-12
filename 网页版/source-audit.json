@@ -4,6 +4,7 @@
   "skillCount": 75,
   "ruleCount": 57,
   "mechanismCount": 10,
+  "teamPresetCount": 3,
   "sourceHashes": {
     "新数值.xlsx": "c79d3bb085972f7d142d4c65bd6170493a25c3420d14263c59e86b2fd6889cbb",
     "交互关系.pdf": "d701892c902a60f9ba4d6460e0512753492676c6114bf61312f6962288e8f106"

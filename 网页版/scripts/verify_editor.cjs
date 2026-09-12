@@ -41,8 +41,12 @@ assert(window.ATLAS_EDITOR, 'ATLAS_EDITOR was not created');
 const firstSkill = window.ATLAS_EDITOR.getItems().find(item => item.kind === '技能');
 const edited = JSON.parse(JSON.stringify(firstSkill));
 edited.fields['能力'] = '攻击999+';
+const editedBase = edited.variants.find(variant => variant.tier === edited.tier);
+editedBase.fields['词条'] = '统一标签，验证';
+edited.variants.forEach(variant => { if (variant !== editedBase) variant.fields['词条'] = '不应保留'; });
 window.ATLAS_EDITOR.saveItem(edited);
 assert.equal(window.ATLAS_EDITOR.getItems().find(item => item.id === edited.id).fields['能力'], '攻击999+');
+assert(window.ATLAS_EDITOR.getItems().find(item => item.id === edited.id).variants.every(variant => variant.fields['词条'] === '统一标签，验证'));
 
 const custom = window.ATLAS_EDITOR.createSkill();
 custom.name = '验证技能';
@@ -62,6 +66,7 @@ assert.equal(window.ATLAS_EDITOR.getItems().find(item => item.id === editedPet.i
 const customPet = window.ATLAS_EDITOR.createPet();
 assert.equal(customPet.kind, '灵兽');
 assert.equal(customPet.variants.length, 4);
+assert(customPet.variants.every(variant => variant.fields['词条'] === customPet.fields['词条']));
 customPet.name = '验证灵宠';
 customPet.fields['宠物名'] = customPet.name;
 customPet.fields.hp = 321;
@@ -78,5 +83,6 @@ window.ATLAS_EDITOR.resetItem(editedPet.id);
 window.ATLAS_EDITOR.resetItem(custom.id);
 window.ATLAS_EDITOR.resetItem(edited.id);
 assert.equal(window.ATLAS_EDITOR.getItems().length, baseCount);
+assert(window.ATLAS_EDITOR.getItems().every(item => (item.variants || []).every(variant => variant.fields['词条'] === item.fields['词条'])));
 
 console.log(JSON.stringify({ok: true, baseCount, checkedDomIds: queriedIds.size, sharedDataPages: ['index.html', 'editor.html', 'battle.html']}));

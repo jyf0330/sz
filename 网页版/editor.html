@@ -54,9 +54,9 @@
           <label class="field"><span id="item-name-label">技能名称</span><input name="name" required maxlength="40"></label>
           <label class="field"><span>起始品质</span><select name="tier"><option>青铜</option><option>白银</option><option>黄金</option><option>钻石</option></select></label>
         </div>
-        <div class="quality-head"><span>品质层数值</span><small>逐档编辑并分别保存</small></div>
+        <div class="quality-head"><span>品质层数值</span><small>数值逐档编辑，标签由起步品质统一</small></div>
         <div id="quality-tabs" class="quality-tabs" role="tablist" aria-label="品质"></div>
-        <label class="field full tag-field"><span>标签名称 <small>使用逗号分隔</small></span><input name="词条" placeholder="生灵，召唤物，火焰"><div id="tag-preview" class="tag-preview"></div></label>
+        <label class="field full tag-field"><span>标签名称 <small id="tag-sync-note">修改后会同步到全部品质阶段</small></span><input name="词条" placeholder="生灵，召唤物，火焰"><div id="tag-preview" class="tag-preview"></div></label>
         <div id="skill-fields" class="form-grid kind-fields">
           <label class="field"><span>能力</span><input name="能力" placeholder="例如：攻击12+"></label>
           <label class="field"><span>防御</span><input name="skill-defense" inputmode="decimal" placeholder="0"></label>

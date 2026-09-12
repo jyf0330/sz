@@ -1,10 +1,10 @@
 {
   "status": "PASS",
-  "rules": 54,
+  "rules": 57,
   "items": 100,
   "offlineIsolatedShareFile": true,
   "checks": [
-    "9 类机制及逐条原文渲染",
+    "10 类机制及逐条原文渲染",
     "悬停与浮层保持",
     "点击固定与证据",
     "100 件物品、分类、搜索与空结果",

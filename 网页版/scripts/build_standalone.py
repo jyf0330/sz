@@ -5,13 +5,14 @@ import json
 import re
 
 root = Path(__file__).resolve().parents[1]
-html = (root / 'index.html').read_text()
+html = (root / 'index.html').read_text(encoding='utf-8')
 # 战斗页需要独立文件；图谱单文件不保留无法离线访问的跳转。
 html = re.sub(r'<a data-battle-link[^>]*>.*?</a>', '', html)
-css = (root / 'styles.css').read_text()
+html = re.sub(r'<a data-preset-battle-link[^>]*>.*?</a>', '', html)
+css = (root / 'styles.css').read_text(encoding='utf-8')
 assert '</style' not in css.lower()
 html = html.replace('<link rel="stylesheet" href="styles.css">', '<style>\n' + css + '\n</style>')
-html = html.replace('<script src="graph-data.js" defer></script><script src="app.js" defer></script>', '')
+html = html.replace('<script src="graph-data.js" defer></script><script src="data-store.js" defer></script><script src="app.js" defer></script>', '')
 html = html.replace('href="./index.html"', 'href="#"')
 attachments = []
 for filename, mime in [('交互关系.pdf', 'application/pdf'), ('新数值.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')]:
@@ -31,10 +32,10 @@ bootstrap = '''
   }
 })();
 '''.replace('ATTACHMENTS', json.dumps(attachments, ensure_ascii=False))
-scripts = '\n'.join((root/f).read_text() for f in ['graph-data.js', 'app.js']) + bootstrap
+scripts = '\n'.join((root/f).read_text(encoding='utf-8') for f in ['graph-data.js', 'data-store.js', 'app.js']) + bootstrap
 # 防止数据中的 HTML 结束标签截断内联脚本。
 scripts = re.sub(r'</script', r'<\\/script', scripts, flags=re.I)
 html = html.replace('</body>', '<script>\n' + scripts + '\n</script>\n</body>')
 output = root / '交互关系_单文件分享版.html'
-output.write_text(html)
+output.write_text(html, encoding='utf-8')
 print(f'{output}\n{output.stat().st_size:,} bytes')

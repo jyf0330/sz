@@ -5,18 +5,34 @@
   if (!atlas || !Array.isArray(atlas.items)) return;
 
   const clone = value => JSON.parse(JSON.stringify(value));
-  const baseItems = clone(atlas.items);
+  function syncItemTags(item) {
+    const clean = clone(item);
+    const variants = Array.isArray(clean.variants) ? clean.variants : [];
+    const baseVariant = variants.find(variant => variant.tier === clean.tier);
+    const baseFields = baseVariant && baseVariant.fields ? baseVariant.fields : clean.fields || {};
+    const tags = baseFields['词条'] == null ? ((clean.fields || {})['词条'] || '') : baseFields['词条'];
+    clean.fields = {...(clean.fields || {}), '词条': tags};
+    variants.forEach(variant => {
+      variant.fields = {...(variant.fields || {}), '词条': tags};
+    });
+    clean.variants = variants;
+    return clean;
+  }
+  const baseItems = atlas.items.map(syncItemTags);
   const baseIds = new Set(baseItems.map(item => item.id));
   let memoryState = {version: 1, updatedAt: null, overrides: {}, custom: []};
   let storageAvailable = true;
 
   function normalizeState(value) {
     const state = value && typeof value === 'object' ? value : {};
+    const overrides = state.overrides && typeof state.overrides === 'object'
+      ? Object.fromEntries(Object.entries(state.overrides).map(([id, item]) => [id, syncItemTags(item)]))
+      : {};
     return {
       version: 1,
       updatedAt: state.updatedAt || null,
-      overrides: state.overrides && typeof state.overrides === 'object' ? state.overrides : {},
-      custom: Array.isArray(state.custom) ? state.custom : []
+      overrides,
+      custom: Array.isArray(state.custom) ? state.custom.map(syncItemTags) : []
     };
   }
 
@@ -48,9 +64,9 @@
     const state = readState();
     const merged = baseItems.map(base => {
       const override = state.overrides[base.id];
-      return override ? {...clone(override), originalName: base.name, edited: true} : clone(base);
+      return override ? {...syncItemTags(override), originalName: base.name, edited: true} : syncItemTags(base);
     });
-    state.custom.forEach(item => merged.push({...clone(item), custom: true, edited: true}));
+    state.custom.forEach(item => merged.push({...syncItemTags(item), custom: true, edited: true}));
     return merged;
   }
 
@@ -67,7 +83,7 @@
   function saveItem(item) {
     if (!item || !item.id) throw new Error('图鉴条目缺少唯一编号');
     const state = readState();
-    const clean = clone(item);
+    const clean = syncItemTags(item);
     delete clean.edited;
     delete clean.originalName;
     if (baseIds.has(clean.id)) state.overrides[clean.id] = clean;
@@ -131,7 +147,7 @@
         fields: {...variant.fields, '技能名': variant.tier === item.tier ? item.name : null}
       }));
     }
-    return item;
+    return syncItemTags(item);
   }
 
   function createPet(seed) {
@@ -163,7 +179,7 @@
       return {tier: quality, fields, source: {sheet: '编辑器新增', row: '—'}};
     });
     const fields = clone(variants.find(variant => variant.tier === tier).fields);
-    return {
+    return syncItemTags({
       id,
       name,
       kind: '灵兽',
@@ -174,7 +190,7 @@
       variants,
       mechanisms: clone(seed && seed.mechanisms ? seed.mechanisms : []),
       custom: true
-    };
+    });
   }
 
   function exportPackage() {
@@ -219,6 +235,7 @@
     isModified,
     getState: readState,
     storageAvailable: () => storageAvailable,
+    syncItemTags,
     apply: applyToAtlas
   };
   applyToAtlas();

@@ -1,10 +1,12 @@
 {
   "status": "PASS",
-  "presets": 3,
-  "cardsPerPreset": 3,
-  "stepsPerPreset": 4,
+  "teamPresets": 3,
+  "loops": 3,
+  "cardsPerLoop": 3,
+  "stepsPerLoop": 4,
   "checks": [
-    "默认打开预摆示例",
+    "三套完整配队范例",
+    "默认打开配队与小循环",
     "三套组合切换",
     "每一步文案与高亮",
     "步骤循环与复位",

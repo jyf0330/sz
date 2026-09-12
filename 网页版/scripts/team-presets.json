@@ -1,0 +1,74 @@
+[
+  {
+    "id": "critical-growth-team",
+    "name": "队伍1-暴击成长",
+    "shortName": "暴击成长",
+    "description": "以角蛙、巨鳄蚁与饿狼的暴击增益带动武技成长，巨伞蕈补充第四个作战位。",
+    "heroHp": 660,
+    "pets": [
+      {"name": "角蛙", "quality": "白银"},
+      {"name": "巨鳄蚁", "quality": "白银"},
+      {"name": "饿狼", "quality": "白银"},
+      {"name": "巨伞蕈", "quality": "白银"}
+    ],
+    "skills": [
+      {"name": "双盾", "quality": "白银", "owner": 0},
+      {"name": "龙牙斩", "quality": "白银", "owner": 1},
+      {"name": "乱抓", "quality": "白银", "owner": 1},
+      {"name": "连抓", "quality": "白银", "owner": 1},
+      {"name": "冲刺拳", "quality": "白银", "owner": 2},
+      {"name": "钩链", "quality": "白银", "owner": 2},
+      {"name": "尾鞭", "quality": "白银", "owner": 2},
+      {"name": "蜕壳投掷", "quality": "白银", "owner": 3}
+    ],
+    "source": {"document": "配队范例.docx", "section": "队伍1-暴击成长"}
+  },
+  {
+    "id": "rapid-output-team",
+    "name": "队伍2-快速输出",
+    "shortName": "快速输出",
+    "description": "四只灵宠各自携带技能，鬼蜂集中装备袖箭、快速换弹与魔性飞剑，形成紧凑输出链。",
+    "heroHp": 660,
+    "pets": [
+      {"name": "圣象甲虫", "quality": "白银"},
+      {"name": "鬼蜂", "quality": "白银"},
+      {"name": "蚁王", "quality": "白银"},
+      {"name": "泥沼妖", "quality": "白银"}
+    ],
+    "skills": [
+      {"name": "轻装", "quality": "白银", "owner": 0},
+      {"name": "使劲", "quality": "白银", "owner": 1},
+      {"name": "袖箭", "quality": "白银", "owner": 1},
+      {"name": "快速换弹", "quality": "白银", "owner": 1},
+      {"name": "魔性飞剑", "quality": "白银", "owner": 1},
+      {"name": "双盾", "quality": "白银", "owner": 2},
+      {"name": "乱抓", "quality": "白银", "owner": 3}
+    ],
+    "source": {"document": "配队范例.docx", "section": "队伍2-快速输出"}
+  },
+  {
+    "id": "fire-energy-team",
+    "name": "队伍3-火热能量",
+    "shortName": "火热能量",
+    "description": "赤精鱼与烁德童子负责火焰链，玄铁龟提供能量运转，白蔷薇用黄金连抓补充联动。",
+    "heroHp": 660,
+    "pets": [
+      {"name": "赤精鱼", "quality": "白银"},
+      {"name": "烁德童子", "quality": "白银"},
+      {"name": "白蔷薇", "quality": "白银"},
+      {"name": "玄铁龟", "quality": "白银"}
+    ],
+    "skills": [
+      {"name": "火中取栗", "quality": "白银", "owner": 0},
+      {"name": "引火", "quality": "白银", "owner": 0},
+      {"name": "激昂", "quality": "白银", "owner": 0},
+      {"name": "飞抓钩", "sourceName": "飞爪钩", "quality": "白银", "owner": 0},
+      {"name": "妒火", "quality": "白银", "owner": 1},
+      {"name": "天火咒", "quality": "白银", "owner": 1},
+      {"name": "连抓", "quality": "黄金", "owner": 2},
+      {"name": "蓄能", "sourceName": "蓄力", "quality": "白银", "owner": 3},
+      {"name": "轻击", "quality": "白银", "owner": 3}
+    ],
+    "source": {"document": "配队范例.docx", "section": "队伍3-火热能量"}
+  }
+]

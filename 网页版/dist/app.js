@@ -1,8 +1,8 @@
 'use strict';
 (() => {
  const D=window.ATLAS_DATA,$=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const byId=new Map(D.items.map(i=>[i.id,i]));
- $('#all-count').textContent=D.items.length;$('#catalog-summary').textContent=`${D.items.length} 件物品 · ${D.mechanisms.length} 类机制 · 表格基线 + 本地编辑`;
+ const byId=new Map(D.items.map(i=>[i.id,i])),teamPresets=Array.isArray(D.teamPresets)?D.teamPresets:[];
+ $('#all-count').textContent=D.items.length;$('#examples-nav b').textContent=D.examples.length+teamPresets.length;$('#catalog-summary').textContent=`${D.items.length} 件物品 · ${D.mechanisms.length} 类机制 · 表格基线 + 本地编辑`;
  let mechanism=D.mechanisms[0],mode='diagram',scope='mechanism',kind='全部',query='',selected=null,pinned=false,evidence=null,zoom=1,hideTimer;
  const compact=()=>matchMedia('(max-width:980px)').matches;
  const empty=v=>v===null||v===undefined||v==='';
@@ -11,9 +11,17 @@
  const avatar=i=>`<span class="item-avatar ${i.kind==='灵兽'?'pet':''}" aria-hidden="true">${E(i.name[0])}</span>`;
  const tierClass=i=>i.tier==='白银'?'silver':i.tier==='黄金'?'gold':'';
  function announce(s){$('#announcement').textContent=s;}
+ function renderRuleDetail(rule){
+  const source=rule&&rule.source?rule.source:null;
+  const title=mechanism?mechanism.name:'机制规则';
+  $('#detail').innerHTML=`<div class="detail-topline"><div class="detail-avatar" aria-hidden="true">${E(mechanism?mechanism.symbol:'机')}</div><span>● 机制规则 · 已固定</span></div><h2 class="detail-name">${E(title)}</h2><div class="badges"><span class="badge tier">机制</span><span class="badge">用户最新口径</span></div><div class="detail-section"><h3>结算规则</h3><p>${E(rule&&rule.result||'')}</p></div>${rule&&rule.condition?`<div class="detail-section"><h3>触发条件</h3><p>${E(rule.condition)}</p></div>`:''}${rule&&(rule.displaySourceText||rule.sourceText)?`<div class="evidence-box"><strong>数值表对应机制</strong>${E(rule.displaySourceText||rule.sourceText)}</div>`:''}${source?`<div class="source-box"><b>新数值.xlsx</b><br>${E(source.sheet)} · 第 ${source.row} 行<br>本图谱关系已按当前机制口径补充展示。</div>`:''}`;
+  $('#unpin').hidden=!pinned;
+ }
+ function restoreSelectedDetail(){if(selected)renderDetail(byId.get(selected));else{$('#detail').innerHTML='';$('#unpin').hidden=true;}}
  function setSelected(i,pin=false,open=false,rule=null){
-  selected=i.id;pinned=pin;evidence=rule;renderDetail(i);
-  document.querySelectorAll('.flow-row,.catalog-card').forEach(el=>el.classList.toggle('selected',el.dataset.itemId===i.id));
+  selected=i?i.id:null;pinned=pin;evidence=rule;
+  if(i)renderDetail(i);else if(rule)renderRuleDetail(rule);
+  document.querySelectorAll('.flow-row,.catalog-card').forEach(el=>el.classList.toggle('selected',!!i&&el.dataset.itemId===i.id));
   if(open&&compact())$('#inspector').classList.add('open');
  }
  function section(k,v){return `<section class="detail-section"><h3>${E(k)}</h3><p class="${empty(v)?'empty':''}">${E(value(v))}</p></section>`;}
@@ -52,18 +60,21 @@
  function renderGraph(){
   $('#graph-rows').innerHTML=mechanism.rules.map((r,k)=>{
    const i=byId.get(r.itemId);
-   return `<div class="flow-row ${selected===i.id?'selected':''}" data-item-id="${i.id}" data-rule="${r.id}"><div class="flow-condition"><span class="node-label">${r.condition?'WHEN / 条件原文':'CONTEXT / 效果说明'}</span><span class="condition-text ${r.condition?'':'generic'}">${E(r.condition|| (i.kind==='技能'?'技能效果':'灵兽特性'))}</span></div>${arrow('first',r.condition?'满足条件':'查看')}<button class="flow-item" data-inspect="${i.id}" aria-label="${E(i.name)}，查看最低品质详情">${avatar(i)}<span><strong>${E(i.name)}</strong><small>${E(i.kind)} · ${E(i.tier)}</small></span></button>${arrow('second','效果')}<button class="flow-result" data-evidence="${r.id}" aria-label="查看${E(i.name)}关系的原表依据"><span class="node-label">THEN / 效果原文</span><span class="result-text">${E(r.result)}</span><span class="source-line">${E(i.source.sheet)} · 第 ${i.source.row} 行 ↗</span></button></div>`;
+   const itemName=i?i.name:(r.item||mechanism.name);
+   const itemNode=i?`<button class="flow-item" data-inspect="${i.id}" aria-label="${E(i.name)}，查看最低品质详情">${avatar(i)}<span><strong>${E(i.name)}</strong><small>${E(i.kind)} · ${E(i.tier)}</small></span></button>`:`<div class="flow-item flow-generic"><span class="item-avatar" aria-hidden="true">${E(mechanism.symbol)}</span><span><strong>${E(itemName)}</strong><small>机制规则 · 用户最新口径</small></span></div>`;
+   const source=r.source?`${E(r.source.sheet)} · 第 ${r.source.row} 行 ↗`:'规则补充';
+   return `<div class="flow-row ${selected===r.itemId&&i?'selected':''}" data-item-id="${E(r.itemId||'')}" data-rule="${r.id}"><div class="flow-condition"><span class="node-label">${r.condition?'WHEN / 条件原文':'CONTEXT / 效果说明'}</span><span class="condition-text ${r.condition?'':'generic'}">${E(r.condition|| (i?(i.kind==='技能'?'技能效果':'灵兽特性'):'机制规则'))}</span></div>${arrow('first',r.condition?'满足条件':'查看')}${itemNode}${arrow('second','效果')}<button class="flow-result" data-evidence="${r.id}" aria-label="查看${E(itemName)}关系的原表依据"><span class="node-label">THEN / 效果原文</span><span class="result-text">${E(r.result)}</span><span class="source-line">${source}</span></button></div>`;
   }).join('');
   $('#rule-count').textContent=`${mechanism.rules.length} 条关键关系`;
   connectItems($('#graph-rows'));
-  $('#graph-rows').querySelectorAll('[data-evidence]').forEach(b=>b.addEventListener('click',()=>{const r=mechanism.rules.find(r=>r.id===b.dataset.evidence);setSelected(byId.get(r.itemId),true,true,r);announce('已显示当前关系的原文依据');}));
+  $('#graph-rows').querySelectorAll('[data-evidence]').forEach(b=>b.addEventListener('click',()=>{const r=mechanism.rules.find(r=>r.id===b.dataset.evidence);setSelected(r.itemId?byId.get(r.itemId):null,true,true,r);announce('已显示当前关系的原文依据');}));
   $('#mechanism-note').textContent=mechanism.note;
   $('#related-items').innerHTML=related().map(i=>`<button class="related-chip" data-inspect="${i.id}"><i></i>${E(i.name)}</button>`).join('');connectItems($('#related-items'));
   requestAnimationFrame(fit);
  }
  function updateHeader(){
   $('#examples-nav').classList.toggle('active',scope==='examples');
-  if(scope==='examples'){$('#mechanism-en').textContent='PRESET LOOPS / 已摆好的配合';$('#mechanism-title').textContent='小循环示例';$('#mechanism-description').textContent='先看摆好的组合，再逐步理解每件物品如何接上下一环。';$('#related-count').textContent=D.examples.length;$('.page-stat span').textContent='示例组合';document.querySelectorAll('[data-mechanism]').forEach(b=>{b.classList.remove('active');b.setAttribute('aria-current','false');});$('#all-items').classList.remove('active');return;}
+  if(scope==='examples'){$('#mechanism-en').textContent='TEAM PRESETS / 配队范例';$('#mechanism-title').textContent='配队与小循环';$('#mechanism-description').textContent='先载入完整配队快速开战，也可以逐步理解局部物品如何接上下一环。';$('#related-count').textContent=D.examples.length+teamPresets.length;$('.page-stat span').textContent='示例组合';document.querySelectorAll('[data-mechanism]').forEach(b=>{b.classList.remove('active');b.setAttribute('aria-current','false');});$('#all-items').classList.remove('active');return;}
 
   const all=scope==='all';document.documentElement.style.setProperty('--accent',all?'#547b60':mechanism.color);
   $('#mechanism-en').textContent=all?'COLLECTION / BASE TIER':`${String(D.mechanisms.indexOf(mechanism)+1).padStart(2,'0')} / ${mechanism.en}`;
@@ -94,12 +105,12 @@
  $('#catalog-tab').addEventListener('click',()=>{if(scope==='examples'){scope='all';updateHeader();}setMode('catalog');});
  $('#search').addEventListener('input',e=>{query=e.target.value.trim().toLowerCase();if(scope==='examples'){scope='all';updateHeader();}setMode('catalog');});
  $('#kind-filters').addEventListener('click',e=>{const b=e.target.closest('[data-kind]');if(!b)return;kind=b.dataset.kind;document.querySelectorAll('[data-kind]').forEach(el=>{el.classList.toggle('active',el===b);el.setAttribute('aria-pressed',String(el===b));});renderCatalog();});
- $('#unpin').addEventListener('click',()=>{pinned=false;evidence=null;renderDetail(byId.get(selected));});
+ $('#unpin').addEventListener('click',()=>{pinned=false;evidence=null;restoreSelectedDetail();});
  $('#close-detail').addEventListener('click',()=>$('#inspector').classList.remove('open'));
  $('#zoom-in').addEventListener('click',()=>{zoom=Math.min(2,zoom+.15);applyZoom();});$('#zoom-out').addEventListener('click',()=>{zoom=Math.max(.5,zoom-.15);applyZoom();});$('#fit').addEventListener('click',fit);
  $('#expand').addEventListener('click',()=>{const on=document.body.classList.toggle('expanded');$('#expand').textContent=on?'⛶ 收起':'⛶ 展开';$('#expand').setAttribute('aria-label',on?'收起关系图':'展开关系图');requestAnimationFrame(fit);});
  $('#tooltip').addEventListener('pointerenter',()=>clearTimeout(hideTimer));$('#tooltip').addEventListener('pointerleave',laterHide);
- document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTip();$('#inspector').classList.remove('open');if(document.body.classList.contains('expanded'))$('#expand').click();if(pinned){pinned=false;evidence=null;renderDetail(byId.get(selected));}}if(e.key==='/'&&!['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('#search').focus();}});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTip();$('#inspector').classList.remove('open');if(document.body.classList.contains('expanded'))$('#expand').click();if(pinned){pinned=false;evidence=null;restoreSelectedDetail();}}if(e.key==='/'&&!['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('#search').focus();}});
  new ResizeObserver(()=>{if(!document.body.classList.contains('expanded'))fit();}).observe($('.main'));
  const byName=new Map(D.items.map(i=>[i.name,i]));let currentExample=0,exampleStep=0;
  function exampleRole(i){return mode==='examples'?(D.examples[currentExample]?.roles[i.name]||''):'';}
@@ -116,8 +127,14 @@
  };
  function art(i){return `<svg viewBox="0 0 96 90" aria-hidden="true"><circle cx="48" cy="45" r="32" fill="currentColor" opacity=".07"/><path d="${drawings[i.name]||'M25 65L48 20L71 65Z'}" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;}
  function boardCard(name,role){const i=byName.get(name),stat=i.kind==='灵兽'?`生命 ${i.fields.hp} · 攻 ${i.fields['攻击']} · 防 ${i.fields['防御']}`:value(i.fields['能力']);return `<button class="board-card ${i.kind==='灵兽'?'board-pet':''}" data-inspect="${i.id}" data-board-name="${E(i.name)}" aria-label="${E(i.name)}，查看最低品质详情"><span class="board-card-top">${E(i.kind)}<b>${E(i.tier)}</b></span><span class="board-art">${art(i)}</span><strong>${E(i.name)}</strong><span class="board-stats">${E(stat)}</span><span class="board-role">${E(role)}</span><span class="board-card-foot">${E(i.fields['词条']||'')} <span>ⓘ</span></span></button>`;}
+ function renderTeamPresets(){
+  const grid=$('#team-preset-grid');
+  grid.innerHTML=teamPresets.map((preset,index)=>`<article class="team-preset-card"><header><span>TEAM ${String(index+1).padStart(2,'0')}</span><b>${E(preset.shortName||preset.name)}</b><small>英雄生命 ${E(preset.heroHp)}</small></header><p>${E(preset.description||'')}</p><div class="team-preset-members">${preset.pets.map((pet,petIndex)=>{const item=byName.get(pet.name),skills=preset.skills.filter(skill=>Number(skill.owner)===petIndex);return `<div class="team-preset-member"><button data-inspect="${item.id}"><strong>${E(pet.name)}</strong><small>${E(pet.quality)}灵宠</small></button><span>${skills.map(skill=>`<span>${E(skill.sourceName||skill.name)}${skill.sourceName&&skill.sourceName!==skill.name?`<em>图鉴名 ${E(skill.name)}</em>`:''}<i>${E(skill.quality)}</i></span>`).join('')}</span></div>`;}).join('')}</div><footer><span>${preset.skills.length} 个技能 · 共 10 格</span><a data-preset-battle-link href="battle.html?preset=${encodeURIComponent(preset.id)}">去编队界面载入 →</a></footer></article>`).join('');
+  connectItems(grid);
+ }
  function renderExample(){
   const ex=D.examples[currentExample];document.documentElement.style.setProperty('--accent',ex.theme);
+  renderTeamPresets();
   $('#example-picker').innerHTML=D.examples.map((e,k)=>`<button class="example-choice ${k===currentExample?'active':''}" data-example="${k}" aria-pressed="${k===currentExample}"><small>0${k+1}</small><span>${E(e.name)}</span><b>${k===currentExample?'已摆好':'查看 →'}</b></button>`).join('');
   $('#example-stage').innerHTML=`<article class="example-build"><header class="build-heading"><div><span class="eyebrow">READY TO EXPLORE / 0${currentExample+1}</span><h2>${E(ex.name)}</h2><p>${E(ex.subtitle)}</p></div><span class="build-tag">${E(ex.tag)}</span></header><div class="playmat"><div class="playmat-label"><span>核心灵兽 + 两件技能</span><span>悬停看效果 · 点击固定</span></div><div class="loadout"><div class="pet-slot"><span class="slot-label">核心灵兽</span>${boardCard(ex.pet,'这套配合的核心特性')}</div><div class="equip-link" aria-hidden="true"><span>装备</span>→</div><div class="skill-slots"><span class="slot-label">以下技能均配给 ${E(ex.pet)}</span><div class="skill-pair">${ex.skills.map((n,k)=>boardCard(n,k===0?'启动 / 供给':'转化 / 受益')).join('')}</div></div></div><div class="board-caption">示意摆放 · 卡片位置用于讲解配合，不代表正式站位或槽位容量</div></div><div class="build-summary"><span>↻</span><p>${E(ex.summary)}</p></div><section class="walkthrough"><div class="walkthrough-heading"><h3>走一遍小循环</h3><span>步骤讲解 · 非战斗模拟</span></div><div id="example-step-tabs" class="example-step-tabs">${ex.steps.map((s,k)=>`<button data-example-step="${k}" aria-label="第${k+1}步：${E(s.title)}">${k+1}</button>`).join('')}</div><div id="example-step-content"></div><div class="walkthrough-controls"><button id="example-reset">↺ 从头看</button><span id="example-progress"></span><button id="example-next">下一步 →</button></div></section><div class="example-boundary"><strong>循环成立的条件</strong><p>${E(ex.boundary)}</p></div></article>`;
   connectItems($('#example-stage'));

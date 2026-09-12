@@ -71,6 +71,7 @@
   });
   const PET_CATALOG = graphPets.concat(fallbackPets.filter(item => !graphPets.some(p => p.name === item.name)));
   const SKILL_CATALOG = graphSkills.concat(fallbackSkills.filter(item => !graphSkills.some(s => s.name === item.name)));
+  const TEAM_PRESETS = window.ATLAS_DATA && Array.isArray(window.ATLAS_DATA.teamPresets) ? window.ATLAS_DATA.teamPresets : [];
   Object.keys(PET_ALIAS).forEach(alias => {
     const source = PET_CATALOG.find(item => item.name === PET_ALIAS[alias]);
     if (source && !PET_CATALOG.some(item => item.name === alias)) PET_CATALOG.push(Object.assign({}, source, {name: alias}));
@@ -167,6 +168,17 @@
       ]
     }
   };
+
+  function configFromPreset(preset) {
+    return {
+      level: 1,
+      income: 20,
+      history: 0,
+      heroHp: Number(preset.heroHp) || 660,
+      pets: clone(preset.pets).slice(0, 4),
+      skills: clone(preset.skills).map(skill => ({name:skill.name, quality:skill.quality, owner:Number(skill.owner)}))
+    };
+  }
 
   const state = {
     round: 1,
@@ -2226,7 +2238,15 @@
   function renderSetup() {
     const draft = state.setupDraft;
     if (!draft) return;
-    let html = '<div class="setup-grid">';
+    let html = '';
+    if (TEAM_PRESETS.length) {
+      html += '<section class="setup-presets"><div class="setup-presets-head"><div><span class="kicker">QUICK LOAD / 配队范例</span><h3>一键载入完整配队</h3></div><small>来自配队范例.docx · 英雄生命统一为 660</small></div><div class="setup-preset-grid">';
+      TEAM_PRESETS.forEach((preset, presetIndex) => {
+        html += '<article class="setup-preset-card"><div><span>0' + (presetIndex + 1) + '</span><strong>' + esc(preset.shortName || preset.name) + '</strong><small>' + preset.pets.length + ' 灵宠 · ' + preset.skills.length + ' 技能 · 10 格</small></div><p>' + esc(preset.pets.map(pet => pet.name).join(' / ')) + '</p><footer><button type="button" data-action="apply-preset" data-preset="' + esc(preset.id) + '" data-team="player">载入己方</button><button type="button" data-action="apply-preset" data-preset="' + esc(preset.id) + '" data-team="enemy">载入对手</button></footer></article>';
+      });
+      html += '</div></section>';
+    }
+    html += '<div class="setup-grid">';
     ['player', 'enemy'].forEach(side => {
       const cfg = draft[side];
       html += '<section class="setup-team ' + side + '"><div class="setup-team-head"><div><span class="kicker">' + (side === 'player' ? 'PLAYER TEAM' : 'ENEMY TEAM') + '</span><h3>' + (side === 'player' ? '己方队伍' : '对手队伍') + '</h3></div><span class="setup-count">' + cfg.pets.filter(item => item.name).length + ' / 4 灵宠</span></div>';
@@ -2376,7 +2396,14 @@
     const action = target.dataset.action;
     const side = target.dataset.team;
     const index = Number(target.dataset.index);
-    if (action === 'config-pet-info') {
+    if (action === 'apply-preset') {
+      const preset = TEAM_PRESETS.find(item => item.id === target.dataset.preset);
+      if (!preset || !state.setupDraft[side]) return;
+      state.setupDraft[side] = configFromPreset(preset);
+      state.setupSkillFilters[side] = '全部';
+      renderSetup();
+      showToast('已将“' + (preset.shortName || preset.name) + '”载入' + (side === 'player' ? '己方' : '对手') + '编队');
+    } else if (action === 'config-pet-info') {
       openConfigInfo('pet', state.setupDraft[side].pets[index], side, index);
     } else if (action === 'config-skill-info') {
       openConfigInfo('skill', state.setupDraft[side].skills[index], side, state.setupDraft[side].skills[index].owner);
@@ -2460,7 +2487,15 @@
     if (event.target.id === 'setup-modal') closeSetup();
   });
 
-  buildFromConfig(clone(defaultConfig), true);
+  const requestedPresetId = new URLSearchParams(location.search).get('preset');
+  const requestedPreset = TEAM_PRESETS.find(preset => preset.id === requestedPresetId);
+  const initialConfig = clone(defaultConfig);
+  if (requestedPreset) initialConfig.player = configFromPreset(requestedPreset);
+  buildFromConfig(initialConfig, true);
   log('战斗模拟器已就绪：先调整部署与技能顺序，再点击开始战斗。', 'trigger', 'SYSTEM');
   renderAll();
+  if (requestedPreset) {
+    openSetup();
+    showToast('已载入配队范例“' + (requestedPreset.shortName || requestedPreset.name) + '”');
+  }
 })();

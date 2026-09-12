@@ -1,8 +1,8 @@
 'use strict';
 (() => {
  const D=window.ATLAS_DATA,$=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const byId=new Map(D.items.map(i=>[i.id,i]));
- $('#all-count').textContent=D.items.length;$('#catalog-summary').textContent=`${D.items.length} 件物品 · ${D.mechanisms.length} 类机制 · 表格基线 + 本地编辑`;
+ const byId=new Map(D.items.map(i=>[i.id,i])),teamPresets=Array.isArray(D.teamPresets)?D.teamPresets:[];
+ $('#all-count').textContent=D.items.length;$('#examples-nav b').textContent=D.examples.length+teamPresets.length;$('#catalog-summary').textContent=`${D.items.length} 件物品 · ${D.mechanisms.length} 类机制 · 表格基线 + 本地编辑`;
  let mechanism=D.mechanisms[0],mode='diagram',scope='mechanism',kind='全部',query='',selected=null,pinned=false,evidence=null,zoom=1,hideTimer;
  const compact=()=>matchMedia('(max-width:980px)').matches;
  const empty=v=>v===null||v===undefined||v==='';
@@ -74,7 +74,7 @@
  }
  function updateHeader(){
   $('#examples-nav').classList.toggle('active',scope==='examples');
-  if(scope==='examples'){$('#mechanism-en').textContent='PRESET LOOPS / 已摆好的配合';$('#mechanism-title').textContent='小循环示例';$('#mechanism-description').textContent='先看摆好的组合，再逐步理解每件物品如何接上下一环。';$('#related-count').textContent=D.examples.length;$('.page-stat span').textContent='示例组合';document.querySelectorAll('[data-mechanism]').forEach(b=>{b.classList.remove('active');b.setAttribute('aria-current','false');});$('#all-items').classList.remove('active');return;}
+  if(scope==='examples'){$('#mechanism-en').textContent='TEAM PRESETS / 配队范例';$('#mechanism-title').textContent='配队与小循环';$('#mechanism-description').textContent='先载入完整配队快速开战，也可以逐步理解局部物品如何接上下一环。';$('#related-count').textContent=D.examples.length+teamPresets.length;$('.page-stat span').textContent='示例组合';document.querySelectorAll('[data-mechanism]').forEach(b=>{b.classList.remove('active');b.setAttribute('aria-current','false');});$('#all-items').classList.remove('active');return;}
 
   const all=scope==='all';document.documentElement.style.setProperty('--accent',all?'#547b60':mechanism.color);
   $('#mechanism-en').textContent=all?'COLLECTION / BASE TIER':`${String(D.mechanisms.indexOf(mechanism)+1).padStart(2,'0')} / ${mechanism.en}`;
@@ -127,8 +127,14 @@
  };
  function art(i){return `<svg viewBox="0 0 96 90" aria-hidden="true"><circle cx="48" cy="45" r="32" fill="currentColor" opacity=".07"/><path d="${drawings[i.name]||'M25 65L48 20L71 65Z'}" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;}
  function boardCard(name,role){const i=byName.get(name),stat=i.kind==='灵兽'?`生命 ${i.fields.hp} · 攻 ${i.fields['攻击']} · 防 ${i.fields['防御']}`:value(i.fields['能力']);return `<button class="board-card ${i.kind==='灵兽'?'board-pet':''}" data-inspect="${i.id}" data-board-name="${E(i.name)}" aria-label="${E(i.name)}，查看最低品质详情"><span class="board-card-top">${E(i.kind)}<b>${E(i.tier)}</b></span><span class="board-art">${art(i)}</span><strong>${E(i.name)}</strong><span class="board-stats">${E(stat)}</span><span class="board-role">${E(role)}</span><span class="board-card-foot">${E(i.fields['词条']||'')} <span>ⓘ</span></span></button>`;}
+ function renderTeamPresets(){
+  const grid=$('#team-preset-grid');
+  grid.innerHTML=teamPresets.map((preset,index)=>`<article class="team-preset-card"><header><span>TEAM ${String(index+1).padStart(2,'0')}</span><b>${E(preset.shortName||preset.name)}</b><small>英雄生命 ${E(preset.heroHp)}</small></header><p>${E(preset.description||'')}</p><div class="team-preset-members">${preset.pets.map((pet,petIndex)=>{const item=byName.get(pet.name),skills=preset.skills.filter(skill=>Number(skill.owner)===petIndex);return `<div class="team-preset-member"><button data-inspect="${item.id}"><strong>${E(pet.name)}</strong><small>${E(pet.quality)}灵宠</small></button><span>${skills.map(skill=>`<span>${E(skill.sourceName||skill.name)}${skill.sourceName&&skill.sourceName!==skill.name?`<em>图鉴名 ${E(skill.name)}</em>`:''}<i>${E(skill.quality)}</i></span>`).join('')}</span></div>`;}).join('')}</div><footer><span>${preset.skills.length} 个技能 · 共 10 格</span><a data-preset-battle-link href="battle.html?preset=${encodeURIComponent(preset.id)}">去编队界面载入 →</a></footer></article>`).join('');
+  connectItems(grid);
+ }
  function renderExample(){
   const ex=D.examples[currentExample];document.documentElement.style.setProperty('--accent',ex.theme);
+  renderTeamPresets();
   $('#example-picker').innerHTML=D.examples.map((e,k)=>`<button class="example-choice ${k===currentExample?'active':''}" data-example="${k}" aria-pressed="${k===currentExample}"><small>0${k+1}</small><span>${E(e.name)}</span><b>${k===currentExample?'已摆好':'查看 →'}</b></button>`).join('');
   $('#example-stage').innerHTML=`<article class="example-build"><header class="build-heading"><div><span class="eyebrow">READY TO EXPLORE / 0${currentExample+1}</span><h2>${E(ex.name)}</h2><p>${E(ex.subtitle)}</p></div><span class="build-tag">${E(ex.tag)}</span></header><div class="playmat"><div class="playmat-label"><span>核心灵兽 + 两件技能</span><span>悬停看效果 · 点击固定</span></div><div class="loadout"><div class="pet-slot"><span class="slot-label">核心灵兽</span>${boardCard(ex.pet,'这套配合的核心特性')}</div><div class="equip-link" aria-hidden="true"><span>装备</span>→</div><div class="skill-slots"><span class="slot-label">以下技能均配给 ${E(ex.pet)}</span><div class="skill-pair">${ex.skills.map((n,k)=>boardCard(n,k===0?'启动 / 供给':'转化 / 受益')).join('')}</div></div></div><div class="board-caption">示意摆放 · 卡片位置用于讲解配合，不代表正式站位或槽位容量</div></div><div class="build-summary"><span>↻</span><p>${E(ex.summary)}</p></div><section class="walkthrough"><div class="walkthrough-heading"><h3>走一遍小循环</h3><span>步骤讲解 · 非战斗模拟</span></div><div id="example-step-tabs" class="example-step-tabs">${ex.steps.map((s,k)=>`<button data-example-step="${k}" aria-label="第${k+1}步：${E(s.title)}">${k+1}</button>`).join('')}</div><div id="example-step-content"></div><div class="walkthrough-controls"><button id="example-reset">↺ 从头看</button><span id="example-progress"></span><button id="example-next">下一步 →</button></div></section><div class="example-boundary"><strong>循环成立的条件</strong><p>${E(ex.boundary)}</p></div></article>`;
   connectItems($('#example-stage'));
