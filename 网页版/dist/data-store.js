@@ -103,6 +103,19 @@
     return writeState(state);
   }
 
+  function defaultAttackRange() {
+    return {
+      version: 1,
+      size: 9,
+      caster: [4, 4],
+      facing: '上',
+      targetSide: '敌方',
+      targetMode: '单目标',
+      condition: '',
+      cells: {range: [], hits: [[3, 4]]}
+    };
+  }
+
   function createSkill(seed) {
     const id = 'custom-skill-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
     const qualities = ['青铜', '白银', '黄金', '钻石'];
@@ -112,6 +125,7 @@
       '能力': '',
       '防御': 0,
       '射程/目标': '正前方第一个敌人',
+      '攻击范围配置': defaultAttackRange(),
       '效果': '',
       '词条': '短篇，技能',
       '主要配合对象': '',
@@ -230,6 +244,7 @@
     resetItem,
     createSkill,
     createPet,
+    defaultAttackRange,
     exportPackage,
     importPackage,
     isModified,

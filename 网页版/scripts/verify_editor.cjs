@@ -8,6 +8,7 @@ const html = fs.readFileSync(path.join(root, 'editor.html'), 'utf8');
 const editorJs = fs.readFileSync(path.join(root, 'editor.js'), 'utf8');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const battleHtml = fs.readFileSync(path.join(root, 'battle.html'), 'utf8');
+const battleJs = fs.readFileSync(path.join(root, 'battle-v2.js'), 'utf8');
 
 const ids = new Set(Array.from(html.matchAll(/\bid="([^"]+)"/g), match => match[1]));
 const queriedIds = new Set(Array.from(editorJs.matchAll(/\$\('#([^']+)'\)/g), match => match[1]));
@@ -20,7 +21,55 @@ assert(battleHtml.indexOf('data-store.js') < battleHtml.indexOf('battle-v2.js'))
 assert(html.includes('id="new-pet"'));
 assert(html.includes('id="pet-fields"'));
 assert(html.includes('id="export-pet-csv"'));
+assert(html.includes('id="range-grid"'));
+assert(html.includes('id="range-sync-previous"'));
+for (const id of ['simple-effect-title', 'simple-effect-read', 'simple-effect-scope', 'simple-effect-action', 'simple-effect-value', 'simple-effect-add', 'simple-effect-list', 'simple-effect-clear', 'simple-effect-apply']) assert(html.includes(`id="${id}"`));
+for (const timing of ['战斗开始时', '回合开始', '回合结束', '被攻击时', '使用时']) assert(html.includes(`value="${timing}"`));
+for (const action of ['充能', '弹药', '拖拽', '击退', '爆能', '倒计时', '多重触发', '伤害', '治疗', '护盾', '再生', '点燃', '剧毒', '霜冻', '亢奋', '衰弱']) assert(html.includes(`<option>${action}</option>`));
+assert(html.includes('name="range-target-side"'));
+for (const side of ['敌方', '友方', '自身', '自身与友方', '自身与敌方']) assert(html.includes(`<option>${side}</option>`));
+assert(html.includes('name="range-target-mode"'));
+assert(html.includes('name="range-condition"'));
 assert(editorJs.includes("create_codex_pet"));
+for (const condition of ['生命最低', '生命最高', '攻击最高', '防御最低', '防御最高', '最前方', '最后方', '带有点燃', '带有剧毒', '带有霜冻', '带有护盾', '随机1个目标', '随机2个目标', '随机3个目标']) assert(html.includes(`<option>${condition}</option>`));
+assert(battleJs.includes('function structuredTargetsFor'));
+assert(battleJs.includes('function targetsForEffectScope'));
+assert(battleJs.includes('function parseSimpleEffectRules'));
+assert(battleJs.includes("runSimpleRules(skill, '使用时', targets)"));
+assert(battleJs.includes("runSimpleRulesForSide('回合开始', side)"));
+assert(battleJs.includes("runSimpleRulesForSide('回合结束', side)"));
+assert(battleJs.includes("runSimpleRules(skill, '被攻击时', [source])"));
+assert(battleJs.includes("targetsForEffectScope(passive, owner, inheritedTargets"));
+assert(battleJs.includes("targetsForEffectScope(retaliation, target, [source]"));
+assert(!battleJs.includes("'泰诺地龙自毒'"));
+assert(!battleJs.includes("'蜈蚣锁自毒'"));
+assert(battleJs.includes("qualityField(cat, quality, '攻击范围配置'"));
+assert(editorJs.includes('function syncPreviousRange'));
+assert(editorJs.includes('function applySimpleEffects'));
+
+function extractFunction(source, name) {
+  const start = source.indexOf(`function ${name}(`);
+  assert(start >= 0, `missing function ${name}`);
+  const bodyStart = source.indexOf('{', start);
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1;
+    else if (source[index] === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, index + 1);
+    }
+  }
+  throw new Error(`unterminated function ${name}`);
+}
+
+const simpleRuleContext = {};
+vm.runInNewContext(`${extractFunction(battleJs, 'parseSimpleEffectRules')}\n${extractFunction(battleJs, 'stripSimpleEffectRules')}\nthis.rules = parseSimpleEffectRules('攻击5。\\n【回合开始】对自身：爆能6、充能3、施加亢奋2。\\n【被攻击时】对目标：击退、施加衰弱1。');\nthis.manual = stripSimpleEffectRules('攻击5。\\n【使用时】对目标：伤害8。');`, simpleRuleContext);
+assert.equal(simpleRuleContext.rules.length, 2);
+assert.equal(simpleRuleContext.rules[0].timing, '回合开始');
+assert.deepEqual(simpleRuleContext.rules[0].actions.map(action => action.type), ['爆能', '充能', '亢奋']);
+assert.equal(simpleRuleContext.rules[1].scope, '对目标');
+assert(simpleRuleContext.manual.includes('攻击5'));
+assert(!simpleRuleContext.manual.includes('【使用时】'));
 
 const storage = new Map();
 const localStorage = {
@@ -49,6 +98,11 @@ assert.equal(window.ATLAS_EDITOR.getItems().find(item => item.id === edited.id).
 assert(window.ATLAS_EDITOR.getItems().find(item => item.id === edited.id).variants.every(variant => variant.fields['词条'] === '统一标签，验证'));
 
 const custom = window.ATLAS_EDITOR.createSkill();
+assert.deepEqual(custom.fields['攻击范围配置'].caster, [4, 4]);
+assert.equal(custom.fields['攻击范围配置'].size, 9);
+assert.equal(custom.fields['攻击范围配置'].targetSide, '敌方');
+assert.equal(custom.fields['攻击范围配置'].targetMode, '单目标');
+assert.deepEqual(custom.fields['攻击范围配置'].cells.hits, [[3, 4]]);
 custom.name = '验证技能';
 custom.fields['技能名'] = custom.name;
 custom.fields['效果'] = '造成伤害9';

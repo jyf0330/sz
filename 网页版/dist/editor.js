@@ -6,6 +6,14 @@
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const clone = value => JSON.parse(JSON.stringify(value));
   const qualities = ['青铜', '白银', '黄金', '钻石'];
+  const RANGE_SIZE = 9;
+  const RANGE_CENTER = [4, 4];
+  const targetSides = ['敌方', '友方', '自身', '自身与友方', '自身与敌方'];
+  const rangeConditions = ['生命最低', '生命最高', '攻击最高', '防御最低', '防御最高', '最前方', '最后方', '带有点燃', '带有剧毒', '带有霜冻', '带有护盾', '随机1个目标', '随机2个目标', '随机3个目标'];
+  const simpleTimings = ['战斗开始时', '回合开始', '回合结束', '被攻击时', '使用时'];
+  const simpleScopes = ['对目标', '对自身', '对目标和自身', '对我方全体', '对敌方全体'];
+  const simpleActions = ['充能', '弹药', '拖拽', '击退', '爆能', '倒计时', '多重触发', '伤害', '治疗', '护盾', '再生', '点燃', '剧毒', '霜冻', '亢奋', '衰弱'];
+  const simpleModifiers = new Set(['爆能', '倒计时', '多重触发']);
   const sharedBindings = [
     {field: '主要配合对象', input: '主要配合对象'},
     {field: '套路', input: '套路'},
@@ -14,7 +22,6 @@
   const skillBindings = [
     {field: '能力', input: '能力'},
     {field: '防御', input: 'skill-defense', numeric: true},
-    {field: '射程/目标', input: '射程/目标'},
     {field: '效果', input: '效果'},
     {field: '定位', input: '定位'}
   ];
@@ -33,6 +40,10 @@
   let quality = null;
   let draft = null;
   let dirty = false;
+  let rangeConfig = null;
+  let rangeStructured = false;
+  let simpleDraft = [];
+  let simpleBuilderKey = '';
   let toastTimer;
 
   function splitTags(value) {
@@ -41,6 +52,251 @@
 
   function value(input, fallback = '未填写') {
     return input === null || input === undefined || input === '' ? fallback : String(input);
+  }
+
+  function rangeCellKey(cell) {
+    return Array.isArray(cell) ? `${cell[0]},${cell[1]}` : String(cell || '');
+  }
+
+  function cleanRangeCells(cells) {
+    const seen = new Set();
+    return (Array.isArray(cells) ? cells : []).filter(cell => {
+      if (!Array.isArray(cell) || cell.length !== 2) return false;
+      const row = Number(cell[0]);
+      const col = Number(cell[1]);
+      const key = `${row},${col}`;
+      if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || row >= RANGE_SIZE || col < 0 || col >= RANGE_SIZE || key === '4,4' || seen.has(key)) return false;
+      cell[0] = row;
+      cell[1] = col;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function everyRangeCell() {
+    const cells = [];
+    for (let row = 0; row < RANGE_SIZE; row += 1) {
+      for (let col = 0; col < RANGE_SIZE; col += 1) {
+        if (row !== RANGE_CENTER[0] || col !== RANGE_CENTER[1]) cells.push([row, col]);
+      }
+    }
+    return cells;
+  }
+
+  function defaultRangeConfig() {
+    return store.defaultAttackRange ? store.defaultAttackRange() : {
+      version: 1, size: RANGE_SIZE, caster: RANGE_CENTER.slice(), facing: '上',
+      targetSide: '敌方', targetMode: '单目标', condition: '', cells: {range: [], hits: [[3, 4]]}
+    };
+  }
+
+  function legacyRangeConfig(fields) {
+    const text = String((fields || {})['射程/目标'] || '正前方第一个敌人');
+    const effectText = String((fields || {})['效果'] || '');
+    const targetAndSelf = /目标(?:和|与|及)自身|自身(?:和|与|及)目标/.test(effectText);
+    const config = defaultRangeConfig();
+    if (targetAndSelf && /友方|我方/.test(text)) config.targetSide = '自身与友方';
+    else if (targetAndSelf) config.targetSide = '自身与敌方';
+    else if (/自身/.test(text) && /友方|我方/.test(text)) config.targetSide = '自身与友方';
+    else if (/自身/.test(text) && /敌方|敌人|目标|前方|格/.test(text)) config.targetSide = '自身与敌方';
+    else if (/自身/.test(text)) config.targetSide = '自身';
+    else if (/友方|我方/.test(text)) config.targetSide = '友方';
+    const condition = rangeConditions.find(item => text.includes(item))
+      || (/生命最低/.test(text) ? '生命最低' : '')
+      || (/生命最高/.test(text) ? '生命最高' : '')
+      || (/攻击最高/.test(text) ? '攻击最高' : '')
+      || (/防御最低/.test(text) ? '防御最低' : '')
+      || (/防御最高/.test(text) ? '防御最高' : '')
+      || (/随机友方|随机敌人/.test(text) ? '随机1个目标' : '')
+      || (/第一个敌人|直线上第一个/.test(text) ? '最前方' : '');
+    config.condition = condition;
+    if (/全体|所有/.test(text)) config.targetMode = '范围内全体';
+    else if (/多目标|第一二格|第二格和第三格|第二和第三格|左右/.test(text)) config.targetMode = '多目标';
+    let cells = [[3, 4]];
+    if (/第三格/.test(text)) cells = [[1, 4]];
+    else if (/第二格/.test(text) && !/第一二格/.test(text)) cells = [[2, 4]];
+    if (/第一二格/.test(text)) cells = [[3, 4], [2, 4]];
+    if (/第二格和第三格|第二和第三格|第二格或第三格/.test(text)) cells = [[2, 4], [1, 4]];
+    if (/直线/.test(text)) cells = [[3, 4], [2, 4], [1, 4], [0, 4]];
+    const area = text.match(/(\d+|一|二|两|三|四)步范围/);
+    if (area) {
+      const numberMap = {一: 1, 二: 2, 两: 2, 三: 3, 四: 4};
+      const radius = /^\d+$/.test(area[1]) ? Number(area[1]) : numberMap[area[1]];
+      cells = everyRangeCell().filter(cell => Math.abs(cell[0] - 4) + Math.abs(cell[1] - 4) <= radius);
+    }
+    if (/全体|所有/.test(text)) cells = everyRangeCell();
+    if (config.targetSide === '自身') cells = [];
+    config.cells = condition ? {range: cells, hits: []} : {range: [], hits: cells};
+    return config;
+  }
+
+  function normalizeRangeConfig(fields) {
+    const raw = fields && fields['攻击范围配置'];
+    if (!raw || typeof raw !== 'object') return legacyRangeConfig(fields);
+    const config = defaultRangeConfig();
+    config.targetSide = targetSides.includes(raw.targetSide) ? raw.targetSide : '敌方';
+    config.targetMode = ['单目标', '多目标', '范围内全体'].includes(raw.targetMode) ? raw.targetMode : '单目标';
+    config.condition = rangeConditions.includes(raw.condition) ? raw.condition : '';
+    config.cells = {
+      range: cleanRangeCells(raw.cells && raw.cells.range ? clone(raw.cells.range) : []),
+      hits: cleanRangeCells(raw.cells && raw.cells.hits ? clone(raw.cells.hits) : [])
+    };
+    return config;
+  }
+
+  function rangeSummary(config) {
+    const conditional = !!config.condition;
+    const count = conditional ? config.cells.range.length : config.cells.hits.length;
+    const cellSummary = config.targetSide === '自身' ? '施法者自身' : `${count}格${conditional ? '范围' : '命中'}`;
+    return `${config.targetSide} · ${config.targetMode} · ${config.condition || '无条件'} · ${cellSummary}`;
+  }
+
+  function rangeGridMarkup(config, interactive) {
+    const selfOnly = config.targetSide === '自身';
+    const activeCells = new Set((selfOnly ? [] : config.condition ? config.cells.range : config.cells.hits).map(rangeCellKey));
+    const activeClass = config.condition ? 'eligible' : 'hit';
+    const tag = interactive ? 'button' : 'span';
+    let html = '';
+    for (let row = 0; row < RANGE_SIZE; row += 1) {
+      for (let col = 0; col < RANGE_SIZE; col += 1) {
+        const caster = row === RANGE_CENTER[0] && col === RANGE_CENTER[1];
+        const key = `${row},${col}`;
+        const cls = `range-cell${caster ? ' caster' : activeCells.has(key) ? ` ${activeClass}` : ''}`;
+        const label = caster ? '施法者，面朝上方' : `第${row + 1}行第${col + 1}列${activeCells.has(key) ? (config.condition ? '，技能范围' : '，命中目标') : ''}`;
+        html += `<${tag}${interactive ? ' type="button"' : ''} class="${cls}" data-row="${row}" data-col="${col}" aria-label="${label}"${(caster || selfOnly) && interactive ? ' disabled' : ''}>${caster ? '↑' : ''}</${tag}>`;
+      }
+    }
+    return html;
+  }
+
+  function updateRangeSummaryInput() {
+    const input = $('#item-form').elements['射程/目标'];
+    if (input && rangeConfig) input.value = rangeSummary(rangeConfig);
+  }
+
+  function renderRangeGrid() {
+    const grid = $('#range-grid');
+    if (!grid || !rangeConfig) return;
+    grid.innerHTML = rangeGridMarkup(rangeConfig, true);
+    $$('.range-cell:not(.caster)', grid).forEach(cell => cell.addEventListener('click', () => {
+      const point = [Number(cell.dataset.row), Number(cell.dataset.col)];
+      const bucket = rangeConfig.condition ? 'range' : 'hits';
+      const key = rangeCellKey(point);
+      const exists = rangeConfig.cells[bucket].some(item => rangeCellKey(item) === key);
+      if (!rangeConfig.condition && rangeConfig.targetMode === '单目标') rangeConfig.cells.hits = exists ? [] : [point];
+      else if (exists) rangeConfig.cells[bucket] = rangeConfig.cells[bucket].filter(item => rangeCellKey(item) !== key);
+      else rangeConfig.cells[bucket].push(point);
+      rangeStructured = true;
+      updateRangeSummaryInput();
+      renderRangeGrid();
+      updateRangeHelp();
+      markDirty();
+    }));
+  }
+
+  function updateRangeHelp() {
+    if (!rangeConfig) return;
+    const help = $('#range-help');
+    if (rangeConfig.targetSide === '自身') help.textContent = '自身技能：绿色中央格就是唯一目标，不需要设置其它范围格。';
+    else {
+      const selfIncluded = rangeConfig.targetSide.startsWith('自身与') ? '；施法者自身始终同时包含在目标中' : '';
+      help.textContent = rangeConfig.condition
+        ? `条件技能：灰色方块是候选范围，模拟器会在其中选择“${rangeConfig.condition}”的${rangeConfig.targetSide.replace('自身与', '')}目标${selfIncluded}。`
+        : `${rangeConfig.targetMode}技能：点击棋盘设置红色命中格；模拟器只会命中这些格内的${rangeConfig.targetSide.replace('自身与', '')}目标${selfIncluded}。`;
+    }
+  }
+
+  function updateRangeActionState() {
+    const disabled = !rangeConfig || rangeConfig.targetSide === '自身';
+    $('#range-clear').disabled = disabled;
+    $('#range-fill').disabled = disabled;
+  }
+
+  function renderRangeEditor(fields) {
+    rangeStructured = !!(fields && fields['攻击范围配置'] && typeof fields['攻击范围配置'] === 'object');
+    rangeConfig = normalizeRangeConfig(fields);
+    const form = $('#item-form');
+    form.elements['range-target-side'].value = rangeConfig.targetSide;
+    form.elements['range-target-mode'].value = rangeConfig.targetMode;
+    form.elements['range-condition'].value = rangeConfig.condition;
+    updateRangeSummaryInput();
+    renderRangeGrid();
+    updateRangeHelp();
+    updateRangeActionState();
+  }
+
+  function changeRangeControl(name, nextValue) {
+    if (!rangeConfig) return;
+    if (name === 'range-target-side') rangeConfig.targetSide = targetSides.includes(nextValue) ? nextValue : '敌方';
+    if (name === 'range-target-mode') {
+      rangeConfig.targetMode = ['单目标', '多目标', '范围内全体'].includes(nextValue) ? nextValue : '单目标';
+      if (!rangeConfig.condition && rangeConfig.targetMode === '单目标' && rangeConfig.cells.hits.length > 1) rangeConfig.cells.hits = rangeConfig.cells.hits.slice(0, 1);
+    }
+    if (name === 'range-condition') {
+      const before = rangeConfig.condition;
+      rangeConfig.condition = rangeConditions.includes(nextValue) ? nextValue : '';
+      if (/^随机[23]个目标$/.test(rangeConfig.condition) && rangeConfig.targetMode === '单目标') {
+        rangeConfig.targetMode = '多目标';
+        $('#item-form').elements['range-target-mode'].value = rangeConfig.targetMode;
+      }
+      if (!before && rangeConfig.condition) {
+        if (!rangeConfig.cells.range.length) rangeConfig.cells.range = rangeConfig.cells.hits.length ? clone(rangeConfig.cells.hits) : [[3, 4]];
+        rangeConfig.cells.hits = [];
+      } else if (before && !rangeConfig.condition) {
+        if (!rangeConfig.cells.hits.length) rangeConfig.cells.hits = rangeConfig.targetMode === '单目标' ? rangeConfig.cells.range.slice(0, 1) : clone(rangeConfig.cells.range);
+        rangeConfig.cells.range = [];
+      }
+    }
+    rangeStructured = true;
+    updateRangeSummaryInput();
+    renderRangeGrid();
+    updateRangeHelp();
+    updateRangeActionState();
+    markDirty();
+  }
+
+  function setRangeCells(fill) {
+    if (!rangeConfig) return;
+    const bucket = rangeConfig.condition ? 'range' : 'hits';
+    rangeConfig.cells[bucket] = fill ? (!rangeConfig.condition && rangeConfig.targetMode === '单目标' ? [[3, 4]] : everyRangeCell()) : [];
+    rangeStructured = true;
+    updateRangeSummaryInput();
+    renderRangeGrid();
+    updateRangeHelp();
+    updateRangeActionState();
+    markDirty();
+  }
+
+  function syncPreviousRange() {
+    const qualityIndex = qualities.indexOf(quality);
+    if (qualityIndex <= 0) return;
+    captureForm();
+    const item = selectedItem();
+    const previousTier = qualities[qualityIndex - 1];
+    const previousVariant = (item.variants || []).find(entry => entry.tier === previousTier);
+    const current = (item.variants || []).find(entry => entry.tier === quality);
+    if (!previousVariant || !current) {
+      showToast(`没有找到${previousTier}品质的射程配置`, 'error');
+      return;
+    }
+    const previousFields = previousVariant.fields || {};
+    const hasStructuredRange = previousFields['攻击范围配置'] && typeof previousFields['攻击范围配置'] === 'object';
+    rangeConfig = normalizeRangeConfig(previousFields);
+    rangeStructured = !!hasStructuredRange;
+    if (!hasStructuredRange) {
+      delete current.fields['攻击范围配置'];
+      current.fields['射程/目标'] = previousFields['射程/目标'] || current.fields['射程/目标'];
+    }
+    const form = $('#item-form');
+    form.elements['range-target-side'].value = rangeConfig.targetSide;
+    form.elements['range-target-mode'].value = rangeConfig.targetMode;
+    form.elements['range-condition'].value = rangeConfig.condition;
+    updateRangeSummaryInput();
+    renderRangeGrid();
+    updateRangeHelp();
+    updateRangeActionState();
+    markDirty();
+    showToast(`已将${previousTier}品质的射程同步到${quality}`);
   }
 
   function selectedItem() {
@@ -57,6 +313,90 @@
 
   function effectFieldFor(item) {
     return item.kind === '灵兽' ? '一句话效果' : '效果';
+  }
+
+  function simpleActionNeedsValue(action) {
+    return action !== '拖拽' && action !== '击退';
+  }
+
+  function parseSimpleEffectText(text) {
+    const rules = [];
+    const pattern = /【(战斗开始时|回合开始|回合结束|被攻击时|使用时)】(对目标和自身|对自身|对目标|对我方全体|对敌方全体)：([^。\n]+)/g;
+    let match;
+    while ((match = pattern.exec(String(text || '')))) {
+      match[3].split('、').map(part => part.trim()).filter(Boolean).forEach(part => {
+        const actionMatch = part.match(/^(?:施加)?(充能|弹药|拖拽|击退|爆能|倒计时|多重触发|伤害|治疗|护盾|再生|点燃|剧毒|霜冻|亢奋|衰弱)\s*(\d+)?$/);
+        if (!actionMatch) return;
+        const action = actionMatch[1];
+        rules.push({timing: match[1], scope: match[2], action, value: simpleActionNeedsValue(action) ? Math.max(1, Number(actionMatch[2]) || 1) : 0});
+      });
+    }
+    return rules;
+  }
+
+  function simpleActionText(rule) {
+    const prefix = ['亢奋', '衰弱'].includes(rule.action) ? '施加' : '';
+    return `${prefix}${rule.action}${simpleActionNeedsValue(rule.action) ? rule.value : ''}`;
+  }
+
+  function groupedSimpleRules() {
+    const groups = new Map();
+    simpleDraft.forEach(rule => {
+      const key = `${rule.timing}\u0000${rule.scope}`;
+      if (!groups.has(key)) groups.set(key, {timing: rule.timing, scope: rule.scope, rules: []});
+      groups.get(key).rules.push(rule);
+    });
+    return Array.from(groups.values()).sort((a, b) => simpleTimings.indexOf(a.timing) - simpleTimings.indexOf(b.timing) || simpleScopes.indexOf(a.scope) - simpleScopes.indexOf(b.scope));
+  }
+
+  function renderSimpleEffectBuilder() {
+    const list = $('#simple-effect-list');
+    list.innerHTML = simpleDraft.map((rule, index) => `<div class="simple-effect-row"><b>${esc(rule.timing)}</b><i>${esc(rule.scope)}</i><span>${esc(simpleActionText(rule))}</span><button type="button" data-simple-remove="${index}" aria-label="删除${esc(simpleActionText(rule))}">删除</button></div>`).join('');
+    const action = $('#simple-effect-action').value;
+    $('#simple-effect-value').disabled = !simpleActionNeedsValue(action);
+  }
+
+  function loadSimpleEffectBuilder(showMessage) {
+    simpleDraft = parseSimpleEffectText($('#item-form').elements['效果'].value);
+    renderSimpleEffectBuilder();
+    if (showMessage) showToast(simpleDraft.length ? `已读取 ${simpleDraft.length} 项简化效果` : '效果栏中没有可读取的简化规则');
+  }
+
+  function addSimpleEffect() {
+    const timings = $$('input[name="simple-timing"]:checked').map(input => input.value).filter(value => simpleTimings.includes(value));
+    if (!timings.length) {
+      showToast('请至少选择一个触发时机', 'error');
+      return;
+    }
+    const scope = $('#simple-effect-scope').value;
+    const action = $('#simple-effect-action').value;
+    const value = simpleActionNeedsValue(action) ? Math.max(1, Math.min(99, Number($('#simple-effect-value').value) || 1)) : 0;
+    timings.forEach(timing => {
+      const existing = simpleDraft.find(rule => rule.timing === timing && rule.scope === scope && rule.action === action);
+      if (existing) existing.value = value;
+      else simpleDraft.push({timing, scope, action, value});
+    });
+    renderSimpleEffectBuilder();
+  }
+
+  function applySimpleEffects() {
+    const groups = groupedSimpleRules();
+    if (!groups.length) {
+      showToast('请先加入至少一项简化效果', 'error');
+      return;
+    }
+    if (groups.some(group => group.rules.every(rule => simpleModifiers.has(rule.action)))) {
+      showToast('每个触发时机和对象组合至少需要一项实际效果', 'error');
+      return;
+    }
+    const textarea = $('#item-form').elements['效果'];
+    const manual = textarea.value
+      .replace(/【(?:战斗开始时|回合开始|回合结束|被攻击时|使用时)】(?:对目标和自身|对自身|对目标|对我方全体|对敌方全体)：[^。\n]+。?/g, '')
+      .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
+    const generated = groups.map(group => `【${group.timing}】${group.scope}：${group.rules.map(simpleActionText).join('、')}。`).join('\n');
+    textarea.value = [manual, generated].filter(Boolean).join('\n');
+    markDirty();
+    showToast('简化规则已应用；保存后同步到战斗模拟器');
   }
 
   function currentVariant(item) {
@@ -91,6 +431,7 @@
   function refreshItems() {
     items = store.getItems();
     window.ATLAS_DATA.items.splice(0, window.ATLAS_DATA.items.length, ...items);
+    simpleBuilderKey = '';
   }
 
   function activateKind(nextKind) {
@@ -125,6 +466,8 @@
       ? [['生命值', fields.hp], ['攻击', fields['攻击']], ['防御', fields['防御']]]
       : [['能力', fields['能力']], ['防御', fields['防御']], ['射程 / 目标', fields['射程/目标']]];
     const effect = fields[effectFieldFor(item)];
+    const previewRange = pet ? null : normalizeRangeConfig(fields);
+    const rangePreviewHtml = pet ? '' : `<div class="preview-range-block"><div class="range-grid" aria-label="技能攻击范围预览">${rangeGridMarkup(previewRange, false)}</div><div class="preview-range-copy"><span>ATTACK RANGE</span><strong>${esc(rangeSummary(previewRange))}</strong><small>${fields['攻击范围配置'] ? '绿色为施法者；灰色为条件候选范围；红色为无条件命中目标。' : '当前由旧版射程文字推导预览；在右侧编辑棋盘后会保存为精确范围。'}</small></div></div>`;
     const source = variant.source || item.source || {sheet: '编辑器新增', row: '—'};
     $('#preview-title').textContent = pet ? '灵宠详情' : '技能详情';
     $('#item-preview').innerHTML = `
@@ -132,6 +475,7 @@
       <div class="preview-name"><span class="preview-avatar">${esc(item.name.slice(0, 1))}</span><div><h2>${esc(item.name)}</h2><p>${esc(value(pet ? fields['套路定位'] : fields['定位'], pet ? '未设置套路定位' : '未设置定位'))}</p></div></div>
       <div class="preview-tags">${tags.length ? tags.map(tag => `<span>${esc(tag)}</span>`).join('') : '<span>未设置标签</span>'}</div>
       <div class="preview-stats">${stats.map(([label, content]) => `<div class="preview-stat"><span>${esc(label)}</span><strong>${esc(value(content))}</strong></div>`).join('')}</div>
+      ${rangePreviewHtml}
       <div class="preview-effect">${esc(value(effect, pet ? '请在右侧主动输入灵宠效果' : '请在右侧主动输入技能效果'))}</div>
       <div class="source-card"><b>${esc(source.sheet || '新数值.xlsx')}</b> · 第 ${esc(source.row || '—')} 行<br>${item.custom ? `编辑器新建${pet ? '灵宠' : '技能'}，将随编辑补丁或 CSV 导出。` : '来源：新数值.xlsx；本地修改以覆盖层保存。'}</div>`;
   }
@@ -165,6 +509,23 @@
       const fallback = binding.numeric ? '0' : '';
       form.elements[binding.input].value = value(fields[binding.field], fallback);
     });
+    const nextBuilderKey = `${item.id}:${quality}`;
+    if (!pet && simpleBuilderKey !== nextBuilderKey) {
+      simpleBuilderKey = nextBuilderKey;
+      simpleDraft = parseSimpleEffectText(fields['效果']);
+      $$('input[name="simple-timing"]').forEach(input => { input.checked = false; });
+    }
+    if (!pet) renderSimpleEffectBuilder();
+    if (pet) {
+      rangeConfig = null;
+      rangeStructured = false;
+    } else {
+      renderRangeEditor(fields);
+      const syncButton = $('#range-sync-previous');
+      const qualityIndex = qualities.indexOf(quality);
+      syncButton.disabled = qualityIndex <= 0;
+      syncButton.title = syncButton.disabled ? '青铜是第一品质，没有上一品质' : `复制${qualities[qualityIndex - 1]}品质的射程配置`;
+    }
     const tagInput = form.elements['词条'];
     tagInput.value = canonicalTags(item);
     tagInput.disabled = quality !== item.tier;
@@ -214,6 +575,10 @@
       const raw = form.elements[binding.input].value;
       variant.fields[binding.field] = binding.numeric && raw !== '' && Number.isFinite(Number(raw)) ? Number(raw) : raw;
     });
+    if (draft.kind === '技能' && rangeConfig && rangeStructured) {
+      variant.fields['攻击范围配置'] = clone(rangeConfig);
+      variant.fields['射程/目标'] = rangeSummary(rangeConfig);
+    }
     variant.fields['品质'] = quality;
     ensureVariant(nextTier);
     draft.variants.forEach(entry => {
@@ -242,6 +607,7 @@
     selectedId = id;
     draft = null;
     dirty = false;
+    simpleBuilderKey = '';
     const item = items.find(entry => entry.id === id);
     quality = item ? item.tier : '青铜';
     const url = new URL(location.href);
@@ -329,16 +695,17 @@
     const pet = itemKind === '灵兽';
     const headers = pet
       ? ['套路', '宠物名', '品质', '词条', 'hp', '攻击', '防御', '一句话效果', '主要配合对象', '升级理由', '套路定位', '原型', '来源工作表', '来源行']
-      : ['技能名', '品质', '能力', '防御', '射程/目标', '效果', '词条', '主要配合对象', '定位', '套路', '原型', '来源工作表', '来源行'];
+      : ['技能名', '品质', '能力', '防御', '射程/目标', '目标阵营', '目标方式', '目标条件', '攻击范围配置', '效果', '词条', '主要配合对象', '定位', '套路', '原型', '来源工作表', '来源行'];
     const rows = [headers];
     items.filter(item => item.kind === itemKind).forEach(item => {
       const variants = item.variants && item.variants.length ? item.variants : [{tier: item.tier, fields: item.fields, source: item.source}];
       variants.forEach(variant => {
         const fields = variant.fields || {};
         const source = variant.source || item.source || {};
+        const attackRange = pet ? null : normalizeRangeConfig(fields);
         rows.push(pet
           ? [fields['套路'], variant.tier === item.tier ? item.name : '', variant.tier, fields['词条'], fields.hp, fields['攻击'], fields['防御'], fields['一句话效果'], fields['主要配合对象'], fields['升级理由'], fields['套路定位'], fields['原型'], source.sheet, source.row]
-          : [variant.tier === item.tier ? item.name : '', variant.tier, fields['能力'], fields['防御'], fields['射程/目标'], fields['效果'], fields['词条'], fields['主要配合对象'], fields['定位'], fields['套路'], fields['原型'], source.sheet, source.row]);
+          : [variant.tier === item.tier ? item.name : '', variant.tier, fields['能力'], fields['防御'], fields['射程/目标'], attackRange.targetSide, attackRange.targetMode, attackRange.condition, JSON.stringify(attackRange), fields['效果'], fields['词条'], fields['主要配合对象'], fields['定位'], fields['套路'], fields['原型'], source.sheet, source.row]);
       });
     });
     const label = pet ? '灵宠' : '技能';
@@ -382,6 +749,9 @@
           ability: {type: 'string', description: '能力数值，例如攻击12+'},
           defense: {type: 'number', description: '防御数值'},
           range: {type: 'string', description: '射程或目标'},
+          targetSide: {type: 'string', enum: targetSides, description: '技能目标阵营'},
+          targetMode: {type: 'string', enum: ['单目标', '多目标', '范围内全体'], description: '技能目标方式'},
+          targetCondition: {type: 'string', enum: ['', ...rangeConditions], description: '目标筛选条件'},
           tags: {type: 'array', items: {type: 'string'}, description: '技能标签'},
           effect: {type: 'string', minLength: 1, description: '完整技能效果文本'}
         },
@@ -401,6 +771,16 @@
         variant.fields['能力'] = input.ability || '';
         variant.fields['防御'] = Number.isFinite(input.defense) ? input.defense : 0;
         variant.fields['射程/目标'] = input.range || '正前方第一个敌人';
+        const attackRange = legacyRangeConfig(variant.fields);
+        attackRange.targetSide = targetSides.includes(input.targetSide) ? input.targetSide : '敌方';
+        attackRange.targetMode = ['单目标', '多目标', '范围内全体'].includes(input.targetMode) ? input.targetMode : attackRange.targetMode;
+        attackRange.condition = rangeConditions.includes(input.targetCondition) ? input.targetCondition : attackRange.condition;
+        if (attackRange.condition && !attackRange.cells.range.length) {
+          attackRange.cells.range = attackRange.cells.hits.length ? clone(attackRange.cells.hits) : [[3, 4]];
+          attackRange.cells.hits = [];
+        }
+        variant.fields['攻击范围配置'] = attackRange;
+        variant.fields['射程/目标'] = rangeSummary(attackRange);
         variant.fields['词条'] = Array.isArray(input.tags) && input.tags.length ? input.tags.join('，') : '短篇，技能';
         variant.fields['效果'] = input.effect.trim();
         item.fields = clone(variant.fields);
@@ -485,15 +865,33 @@
   $('#new-pet').addEventListener('click', () => newItem('灵兽'));
   $('#new-skill').addEventListener('click', () => newItem('技能'));
   $('#item-form').addEventListener('submit', saveCurrent);
-  $('#item-form').addEventListener('input', event => { if (event.target.name) { if (event.target.name === '词条') renderTags(); markDirty(); } });
+  $('#item-form').addEventListener('input', event => { if (event.target.name && !event.target.name.startsWith('range-')) { if (event.target.name === '词条') renderTags(); markDirty(); } });
   $('#item-form').addEventListener('change', event => {
     if (!event.target.name) return;
+    if (event.target.name.startsWith('range-')) {
+      changeRangeControl(event.target.name, event.target.value);
+      return;
+    }
     markDirty();
     if (event.target.name === 'tier') {
       quality = draft.tier;
       renderEditor();
       renderPreview();
     }
+  });
+  $('#range-clear').addEventListener('click', () => setRangeCells(false));
+  $('#range-fill').addEventListener('click', () => setRangeCells(true));
+  $('#range-sync-previous').addEventListener('click', syncPreviousRange);
+  $('#simple-effect-action').addEventListener('change', renderSimpleEffectBuilder);
+  $('#simple-effect-add').addEventListener('click', addSimpleEffect);
+  $('#simple-effect-read').addEventListener('click', () => loadSimpleEffectBuilder(true));
+  $('#simple-effect-clear').addEventListener('click', () => { simpleDraft = []; renderSimpleEffectBuilder(); });
+  $('#simple-effect-apply').addEventListener('click', applySimpleEffects);
+  $('#simple-effect-list').addEventListener('click', event => {
+    const button = event.target.closest('[data-simple-remove]');
+    if (!button) return;
+    simpleDraft.splice(Number(button.dataset.simpleRemove), 1);
+    renderSimpleEffectBuilder();
   });
   $('#reset-item').addEventListener('click', resetCurrent);
   $('#duplicate-item').addEventListener('click', () => { captureForm(); const item = selectedItem(); newItem(item.kind, item); });

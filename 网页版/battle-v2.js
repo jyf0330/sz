@@ -6,13 +6,46 @@
   const clone = value => JSON.parse(JSON.stringify(value));
 
   const ROWS = 5;
-  const COLS = 6;
+  const COLS = 4;
   const QUALITY = ['青铜', '白银', '黄金', '钻石'];
   const QUALITY_MULT = {青铜: 1, 白银: 2, 黄金: 4, 钻石: 8};
   const SIZE_LABEL = {short: '短篇', medium: '中篇', long: '长篇'};
   const SIZE_SLOTS = {short: 1, medium: 2, long: 3};
   const PET_ALIAS = {'鲛人抢手': '鲛人枪兵'};
   const SKILL_ALIAS = {'钩链': '钩镰', '快速换弹': '快速装弹', '蛇影寒': '寒蛇影'};
+  const TARGET_SIDES = ['敌方', '友方', '自身', '自身与友方', '自身与敌方'];
+  const RANGE_CONDITIONS = ['生命最低', '生命最高', '攻击最高', '防御最低', '防御最高', '最前方', '最后方', '带有点燃', '带有剧毒', '带有霜冻', '带有护盾', '随机1个目标', '随机2个目标', '随机3个目标'];
+
+  function normalizeAttackRange(raw) {
+    if (typeof raw === 'string') {
+      try { raw = JSON.parse(raw); } catch (error) { return null; }
+    }
+    if (!raw || typeof raw !== 'object' || Number(raw.size) !== 9 || !raw.cells) return null;
+    const cleanCells = list => {
+      const seen = new Set();
+      return (Array.isArray(list) ? list : []).filter(cell => {
+        if (!Array.isArray(cell) || cell.length !== 2) return false;
+        const row = Number(cell[0]);
+        const col = Number(cell[1]);
+        const key = row + ',' + col;
+        if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || row > 8 || col < 0 || col > 8 || key === '4,4' || seen.has(key)) return false;
+        cell[0] = row;
+        cell[1] = col;
+        seen.add(key);
+        return true;
+      });
+    };
+    return {
+      version: 1,
+      size: 9,
+      caster: [4, 4],
+      facing: '上',
+      targetSide: TARGET_SIDES.includes(raw.targetSide) ? raw.targetSide : '敌方',
+      targetMode: ['单目标', '多目标', '范围内全体'].includes(raw.targetMode) ? raw.targetMode : '单目标',
+      condition: RANGE_CONDITIONS.includes(raw.condition) ? raw.condition : '',
+      cells: {range: cleanCells(clone(raw.cells.range || [])), hits: cleanCells(clone(raw.cells.hits || []))}
+    };
+  }
 
   const fallbackPets = [
     {name:'鲛人抢手', tier:'白银', hp:100, atk:5, def:2, effect:'技能暴击时，对随机敌人造成额外伤害。'},
@@ -61,6 +94,7 @@
       tier: n.record && n.record.tier ? n.record.tier : '青铜',
       ability: f.能力 || '',
       range: f['射程/目标'] || '正前方第一个敌人',
+      rangeConfig: normalizeAttackRange(f['攻击范围配置']),
       effect: f.效果 || '暂无效果说明',
       tags: f.词条 || '',
       role: f.定位 || '',
@@ -125,9 +159,29 @@
     VALUE_PATTERN.lastIndex = 0;
     return entries;
   }
-  const isAttackSkill = skill => /攻击\d|伤害\d|点燃|淬毒|覆雪|结霜|霜冻|造成伤害/.test((skill && skill.ability || '') + ' ' + (skill && skill.effect || ''));
+  function parseSimpleEffectRules(text) {
+    const rules = [];
+    const pattern = /【(战斗开始时|回合开始|回合结束|被攻击时|使用时)】(对目标和自身|对自身|对目标|对我方全体|对敌方全体)：([^。\n]+)/g;
+    let match;
+    while ((match = pattern.exec(String(text || '')))) {
+      const actions = match[3].split('、').map(part => part.trim()).map(part => {
+        const action = part.match(/^(?:施加)?(充能|弹药|拖拽|击退|爆能|倒计时|多重触发|伤害|治疗|护盾|再生|点燃|剧毒|霜冻|亢奋|衰弱)\s*(\d+)?$/);
+        return action ? {type: action[1], value: Math.max(1, Number(action[2]) || 1)} : null;
+      }).filter(Boolean);
+      if (actions.length) rules.push({id: rules.length, timing: match[1], scope: match[2], actions});
+    }
+    return rules;
+  }
+  function stripSimpleEffectRules(text) {
+    return String(text || '').replace(/【(?:战斗开始时|回合开始|回合结束|被攻击时|使用时)】(?:对目标和自身|对自身|对目标|对我方全体|对敌方全体)：[^。\n]+。?/g, ' ');
+  }
+  const isAttackSkill = skill => {
+    const legacy = (skill && skill.ability || '') + ' ' + (skill && (skill.legacyEffect || stripSimpleEffectRules(skill.effect)) || '');
+    const simpleAttack = (skill && skill.simpleRules || []).some(rule => rule.timing === '使用时' && rule.actions.some(action => /伤害|点燃|剧毒|霜冻|拖拽|击退|衰弱/.test(action.type)));
+    return simpleAttack || /攻击\d|伤害\d|点燃|淬毒|覆雪|结霜|霜冻|造成伤害/.test(legacy);
+  };
   const PASSIVE_SKILL_NAMES = new Set(['连抓', '锋锐鳞片', '饮血倒刺']);
-  const isPassiveSkill = skill => !!skill && (PASSIVE_SKILL_NAMES.has(skill.name) || /被动/.test((skill.effect || '') + (skill.type || '')));
+  const isPassiveSkill = skill => !!skill && (PASSIVE_SKILL_NAMES.has(skill.name) || /被动/.test((skill.legacyEffect || stripSimpleEffectRules(skill.effect)) + (skill.type || '')) || ((skill.simpleRules || []).length > 0 && !(skill.simpleRules || []).some(rule => rule.timing === '使用时') && !isAttackSkill(skill)));
   const isMartialSkill = skill => !!skill && !isPassiveSkill(skill) && /武技/.test((skill.type || '') + ' ' + (skill.tags || ''));
   const sideLabel = side => side === 'player' ? '己方' : '敌方';
   const coord = pos => String.fromCharCode(65 + pos[1]) + (pos[0] + 1);
@@ -210,7 +264,10 @@
     enemySkills: [],
     setupDraft: null,
     configInfo: null,
-    setupSkillFilters: {player: '全部', enemy: '全部'}
+    setupSkillFilters: {player: '全部', enemy: '全部'},
+    positionSnapshots: {player: new Map(), enemy: new Map()},
+    pendingRevives: [],
+    turnStartResolved: false
   };
 
   function createHero(config, side) {
@@ -244,7 +301,7 @@
       tags,
       abilityEnergyCost,
       abilityCountdownMax,
-      energy: 0, maxEnergy: 12,
+      energy: 0, maxEnergy: Infinity,
       shield: 0,
       burn: 0,
       poison: 0,
@@ -256,6 +313,8 @@
       rooted: 0,
       roundSkillDamage: 0,
       roundIgnite: 0,
+      permanentSkillDamage: 0,
+      permanentIgnite: 0,
       skillDamage: 0,
       regen: 0,
       critBonus: 0,
@@ -277,16 +336,20 @@
     const scale = qualityScale(cat, quality);
     const ability = String(qualityField(cat, quality, '能力', cat.ability) || '');
     const range = String(qualityField(cat, quality, '射程/目标', cat.range) || '正前方第一个敌人');
+    const rangeConfig = normalizeAttackRange(qualityField(cat, quality, '攻击范围配置', cat.rangeConfig));
     const effect = String(qualityField(cat, quality, '效果', cat.effect) || '暂无效果说明');
     const tagsText = String(qualityField(cat, quality, '词条', cat.tags) || '');
     const role = String(qualityField(cat, quality, '定位', cat.role) || cat.role || '');
     const combo = String(qualityField(cat, quality, '套路', cat.combo) || cat.combo || '');
     const size = sizeFrom({tags: tagsText, effect});
     const baseTier = cat.tier || '青铜';
-    const effectText = effect + ' ' + tagsText;
+    const simpleRules = parseSimpleEffectRules(effect);
+    const legacyEffect = stripSimpleEffectRules(effect);
+    const effectText = legacyEffect + ' ' + tagsText;
     const ammoMax = parseFirst(effectText, [/弹药\s*(\d+)/], 0);
     const baseCountdown = parseFirst(effectText, [/倒计时\s*(\d+)/], 0);
     const startCountdown = parseFirst(effectText, [/战斗开始时进入倒计时\s*(\d+)/], baseCountdown);
+    const hasBattleStartCountdown = /战斗开始时进入倒计时\s*\d+/.test(effectText);
     const explosionCost = parseFirst(effectText, [/爆能\s*(\d+)/], 0);
     const countdownIndex = effectText.indexOf('倒计时');
     const explosionIndex = effectText.indexOf('爆能');
@@ -305,7 +368,11 @@
       type: (tagsText.split('，')[1] || tagsText.split(',')[1] || '技能'),
       ability: ability || String(effect || '效果技能').split('；')[0].split('。')[0] || '效果技能',
       range,
+      rangeConfig,
       effect,
+      legacyEffect,
+      simpleRules,
+      simpleRuleState: {},
       valueEntries: parseValueEntries(ability),
       tags: tagsText.split(/[，,、\s]+/).filter(Boolean),
       role: role || (/(攻击|伤害|点燃|淬毒|覆雪|结霜|霜冻)/.test(ability + effect) ? '输出技能' : '体系运转'),
@@ -314,12 +381,13 @@
       ammo: ammoMax,
       baseCountdown,
       countdownStart: startCountdown || baseCountdown,
-      countdown: explosionIndex >= 0 && countdownIndex >= 0 && explosionIndex < countdownIndex ? 0 : (startCountdown || baseCountdown),
+      countdown: hasBattleStartCountdown ? 0 : (explosionIndex >= 0 && countdownIndex >= 0 && explosionIndex < countdownIndex ? 0 : (startCountdown || baseCountdown)),
       explosionCost,
       explosionBeforeCountdown: explosionIndex >= 0 && countdownIndex >= 0 && explosionIndex < countdownIndex,
       countdownBeforeExplosion: explosionIndex >= 0 && countdownIndex >= 0 && countdownIndex < explosionIndex,
       countdownTailOnly: !!baseCountdown && !hasIndependentEffect,
       explosionTailOnly: !!explosionCost && !/造成伤害|点燃|淬毒|覆雪|结霜|霜冻|护盾|护甲|治疗|再生|获得|赋予|施加|充能|装填|提升|攻击/.test(explosionIndex >= 0 ? effectText.slice(0, explosionIndex) : ''),
+      battleStartResolved: false,
       explosionAvailable: true,
       scale,
       damageBonus: 0,
@@ -348,6 +416,10 @@
     state.enemySkills = config.enemy.skills.filter(item => item.name).map((item, i) => createSkill(item, 'enemy', i, state.enemy.pets));
     placeInitialUnits(state.player.pets, 'player');
     placeInitialUnits(state.enemy.pets, 'enemy');
+    capturePositionSnapshot('player');
+    capturePositionSnapshot('enemy');
+    state.pendingRevives = [];
+    state.turnStartResolved = false;
     state.round = 1;
     state.action = 0;
     state.side = 'player';
@@ -368,6 +440,9 @@
     state.winner = null;
     state.shop = makeShop(0);
     battleStartEffects();
+    startEffects('player');
+    state.turnStartResolved = true;
+    state.phase = 'position';
     if (!silent) log('已应用新配置，战斗重置为第1回合的部署阶段。', 'trigger', 'CONFIG');
     renderAll();
   }
@@ -399,6 +474,10 @@
     state.logs.push({round: state.round, action: state.action, text, kind, meta});
     if (state.logs.length > 150) state.logs.shift();
     renderLog();
+  }
+
+  function logValue(kind, value) {
+    return '<strong class="log-value log-' + kind + '">' + esc(value) + '</strong>';
   }
 
   function trace(text, kind = 'trigger') {
@@ -433,6 +512,7 @@
   }
 
   function phaseText() {
+    if (state.phase === 'position' && pendingReviveFor('player')) return '选择复活位置';
     const map = {
       position: '部署与走位',
       'start-resolving': '回合开始结算',
@@ -469,7 +549,7 @@
     const e = state.enemy;
     $('#team-context').innerHTML =
       '<div class="team-context-card ally-context"><span>己方英雄</span><strong>' + p.hp + ' / ' + p.maxHp + '</strong><small>等级 ' + p.level + ' · 金币 ' + p.gold + ' · 胜场 ' + p.history + '</small></div>' +
-      '<div class="phase-context"><b>' + esc(phaseText()) + '</b><small>' + (state.phase === 'position' ? '可移动己方灵宠并调整技能顺序' : state.phase === 'finished' ? '可重置或重新配置战斗' : '所有效果按日志顺序记录') + '</small></div>' +
+      '<div class="phase-context"><b>' + esc(phaseText()) + '</b><small>' + (pendingReviveFor('player') ? '请点击棋盘空格选择复活位置' : state.phase === 'position' ? '可移动己方灵宠并调整技能顺序' : state.phase === 'finished' ? '可重置或重新配置战斗' : '所有效果按日志顺序记录') + '</small></div>' +
       '<div class="team-context-card enemy-context"><span>敌方英雄</span><strong>' + e.hp + ' / ' + e.maxHp + '</strong><small>等级 ' + e.level + ' · 金币 ' + e.gold + ' · 胜场 ' + e.history + '</small></div>';
   }
 
@@ -477,8 +557,122 @@
     return document.querySelector('.cell[data-row="' + row + '"][data-col="' + col + '"]');
   }
 
+  function editorCellForTarget(owner, target) {
+    const rowDelta = target.pos[0] - owner.pos[0];
+    const colDelta = target.pos[1] - owner.pos[1];
+    return owner.side === 'player' ? [4 + rowDelta, 4 + colDelta] : [4 - rowDelta, 4 - colDelta];
+  }
+
+  function stableTargetOrder(list) {
+    return list.slice().sort((a, b) => a.pos[0] - b.pos[0] || a.pos[1] - b.pos[1] || a.id.localeCompare(b.id));
+  }
+
+  function pseudoRandomTargets(list, skill, count) {
+    const seed = `${state.round}:${state.action}:${skill.id}`;
+    const score = unit => {
+      const text = seed + ':' + unit.id;
+      let hash = 2166136261;
+      for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+      return hash >>> 0;
+    };
+    return list.slice().sort((a, b) => score(a) - score(b) || a.id.localeCompare(b.id)).slice(0, count);
+  }
+
+  function targetsForEffectScope(skill, owner, selectedTargets, keywords) {
+    const source = String(skill && (skill.legacyEffect || stripSimpleEffectRules(skill.effect)) || '');
+    const relevant = source.split(/[，,；;。]|然后/).map(part => part.trim()).filter(part => part && keywords.some(keyword => part.includes(keyword)));
+    const chosen = (selectedTargets || []).filter(Boolean);
+    const nonSelf = chosen.filter(target => target.id !== owner.id);
+    const fallback = skill && skill.rangeConfig && skill.rangeConfig.targetSide === '自身'
+      ? [owner]
+      : (nonSelf.length ? nonSelf : chosen);
+    if (!relevant.length) return fallback;
+    let explicit = false;
+    let includeSelf = false;
+    let includeSelected = false;
+    let includeAllAllies = false;
+    let includeAllEnemies = false;
+    relevant.forEach(clause => {
+      const selfAndTarget = /目标(?:和|与|及)自身|自身(?:和|与|及)目标/.test(clause);
+      if (selfAndTarget) {
+        explicit = true;
+        includeSelf = true;
+        includeSelected = true;
+      }
+      if (/获得/.test(clause) && !/目标|伤害来源|友方|我方|敌方|敌人/.test(clause)) {
+        explicit = true;
+        includeSelf = true;
+      }
+      if (/我方全体|所有我方|所有友方/.test(clause)) {
+        explicit = true;
+        includeAllAllies = true;
+      } else if (/敌方全体|所有敌方|所有敌人/.test(clause)) {
+        explicit = true;
+        includeAllEnemies = true;
+      } else {
+        if (/自身/.test(clause)) {
+          explicit = true;
+          includeSelf = true;
+        }
+        if (/目标|伤害来源|友方|我方|敌方|敌人/.test(clause)) {
+          explicit = true;
+          includeSelected = true;
+        }
+      }
+    });
+    if (!explicit) return fallback;
+    const scoped = [];
+    if (includeSelf) scoped.push(owner);
+    if (includeSelected) scoped.push(...chosen.filter(target => target.id !== owner.id));
+    if (includeAllAllies) scoped.push(...unitsOf(owner.side, true));
+    if (includeAllEnemies) scoped.push(...unitsOf(opponentSide(owner.side), true));
+    return Array.from(new Map(scoped.filter(target => target && !target.dead && target.hp > 0).map(target => [target.id, target])).values());
+  }
+
+  function structuredTargetsFor(skill, owner) {
+    const config = skill.rangeConfig;
+    const includesSelf = config.targetSide === '自身' || config.targetSide.startsWith('自身与');
+    if (config.targetSide === '自身') return owner.dead || owner.hp <= 0 ? [] : [owner];
+    let candidates = allUnits().filter(target => target.id !== owner.id && validTarget(skill, owner, target, true));
+    candidates = stableTargetOrder(candidates);
+    const condition = config.condition;
+    const keepExtreme = (getter, highest) => {
+      if (!candidates.length) return;
+      const values = candidates.map(getter);
+      const extreme = highest ? Math.max(...values) : Math.min(...values);
+      candidates = candidates.filter(target => getter(target) === extreme);
+    };
+    if (condition === '生命最低') keepExtreme(target => target.hp, false);
+    else if (condition === '生命最高') keepExtreme(target => target.hp, true);
+    else if (condition === '攻击最高') keepExtreme(target => target.atk, true);
+    else if (condition === '防御最低') keepExtreme(target => target.def, false);
+    else if (condition === '防御最高') keepExtreme(target => target.def, true);
+    else if (condition === '最前方') keepExtreme(target => target.side === 'player' ? target.pos[0] : -target.pos[0], false);
+    else if (condition === '最后方') keepExtreme(target => target.side === 'player' ? target.pos[0] : -target.pos[0], true);
+    else if (condition === '带有点燃') candidates = candidates.filter(target => target.burn > 0);
+    else if (condition === '带有剧毒') candidates = candidates.filter(target => target.poison > 0);
+    else if (condition === '带有霜冻') candidates = candidates.filter(target => target.frost > 0);
+    else if (condition === '带有护盾') candidates = candidates.filter(target => target.shield > 0);
+    const randomMatch = condition.match(/^随机([123])个目标$/);
+    if (randomMatch) candidates = pseudoRandomTargets(candidates, skill, Number(randomMatch[1]));
+    else if (config.targetMode === '单目标') candidates = candidates.slice(0, 1);
+    return includesSelf ? [owner, ...candidates] : candidates;
+  }
+
   function validTarget(skill, owner, target, includeAlly) {
     if (!skill || !owner || !target || target.dead || target.hp <= 0) return false;
+    if (skill.rangeConfig) {
+      const targetSide = skill.rangeConfig.targetSide;
+      const includesSelf = targetSide === '自身' || targetSide.startsWith('自身与');
+      if (target.id === owner.id) return includesSelf;
+      if (targetSide === '自身') return false;
+      const wantsAlly = targetSide === '友方' || targetSide === '自身与友方';
+      if (wantsAlly ? !sameSide(owner, target) : sameSide(owner, target)) return false;
+      const point = editorCellForTarget(owner, target);
+      if (point[0] < 0 || point[0] > 8 || point[1] < 0 || point[1] > 8) return false;
+      const bucket = skill.rangeConfig.condition ? skill.rangeConfig.cells.range : skill.rangeConfig.cells.hits;
+      return bucket.some(cell => cell[0] === point[0] && cell[1] === point[1]);
+    }
     const enemy = !sameSide(owner, target);
     if (!includeAlly && !enemy) return false;
     const text = skill.range || '';
@@ -519,13 +713,15 @@
   }
 
   function skillIsSupport(skill) {
-    const text = (skill.ability || '') + (skill.effect || '') + (skill.range || '');
-    return /治疗|护甲|护盾|能量|装填|亢奋|攻击\+|防御\+|随机友方|我方/.test(text) && !/攻击\d|伤害\d|点燃|淬毒|覆雪|结霜|霜冻/.test(skill.ability || '');
+    const text = (skill.ability || '') + (skill.legacyEffect || stripSimpleEffectRules(skill.effect)) + (skill.range || '');
+    const simpleSupport = (skill.simpleRules || []).some(rule => rule.timing === '使用时' && rule.actions.some(action => /充能|弹药|治疗|护盾|再生|亢奋/.test(action.type)));
+    return (simpleSupport || /治疗|护甲|护盾|能量|装填|亢奋|攻击\+|防御\+|随机友方|我方/.test(text)) && !isAttackSkill(skill);
   }
 
   function targetsFor(skill, owner, side) {
     if (!owner) return [];
     if (isPassiveSkill(skill)) return [];
+    if (skill.rangeConfig) return structuredTargetsFor(skill, owner);
     const allies = unitsOf(side, true);
     const enemies = unitsOf(opponentSide(side), true);
     if ((skill.range || '').includes('自身') && !isAttackSkill(skill)) return [owner];
@@ -566,7 +762,7 @@
     if (owner.dead || owner.hp <= 0) return '所属灵宠阵亡';
     if (isPassiveSkill(skill)) return '被动触发';
     if (skill.ammoMax && skill.ammo <= 0) return '弹药耗尽';
-    if (isAttackSkill(skill) && !targetsFor(skill, owner, skill.side).length) return '范围内无目标';
+    if ((skill.rangeConfig || isAttackSkill(skill)) && !targetsFor(skill, owner, skill.side).length) return '范围内无目标';
     if (owner.silence > 0 && isAttackSkill(skill)) return '封刃中';
     return '可用';
   }
@@ -595,11 +791,13 @@
     if (kind === 'damage') {
       add('本方技能伤害提升', currentTeam && currentTeam.skillDamage);
       add('灵宠本回合伤害提升', skill && !skill.preview && owner && owner.roundSkillDamage);
+      add('灵宠战斗持续伤害提升', skill && !skill.preview && owner && owner.permanentSkillDamage);
       add('灵宠技能伤害提升', skill && !skill.preview && owner && owner.skillDamage);
       add('技能自身伤害提升', skill && !skill.preview && skill.damageBonus);
     }
     if (kind === 'burn') {
       add('本回合点燃提升', skill && !skill.preview && owner && owner.roundIgnite);
+      add('灵宠战斗持续点燃提升', skill && !skill.preview && owner && owner.permanentIgnite);
       add('技能自身点燃提升', skill && !skill.preview && skill.burnBonus);
     }
     if (kind === 'poison') add('技能自身淬毒提升', skill && skill.poisonBonus);
@@ -672,8 +870,10 @@
       const owner = ownerOf(selectedSkill);
       for (let row = 0; row < ROWS; row += 1) {
         for (let col = 0; col < COLS; col += 1) {
-          const fake = {id:'cell-' + row + '-' + col, side: opponentSide(owner.side), hp:1, dead:false, pos:[row, col]};
-          if (validTarget(selectedSkill, owner, fake, false)) cells.get(row + ',' + col).classList.add('range');
+          const targetSide = selectedSkill.rangeConfig && selectedSkill.rangeConfig.targetSide;
+          const fakeSide = targetSide === '友方' || targetSide === '自身与友方' ? owner.side : opponentSide(owner.side);
+          const fake = {id:'cell-' + row + '-' + col, side: fakeSide, hp:1, dead:false, pos:[row, col]};
+          if (validTarget(selectedSkill, owner, fake, !!selectedSkill.rangeConfig)) cells.get(row + ',' + col).classList.add('range');
         }
       }
     }
@@ -706,13 +906,21 @@
 
     if (selectedSkill && ownerOf(selectedSkill)) {
       const owner = ownerOf(selectedSkill);
-      allUnits().filter(unit => validTarget(selectedSkill, owner, unit, false)).forEach(unit => {
+      const highlightedTargets = selectedSkill.rangeConfig
+        ? structuredTargetsFor(selectedSkill, owner)
+        : allUnits().filter(unit => validTarget(selectedSkill, owner, unit, false));
+      highlightedTargets.forEach(unit => {
         const cell = cells.get(unit.pos[0] + ',' + unit.pos[1]);
         if (cell && cell.querySelector('.unit')) cell.querySelector('.unit').classList.add('in-range');
       });
     }
 
-    if (state.phase === 'position' && selected && selected.side === 'player' && !selected.dead) {
+    if (state.phase === 'position' && pendingReviveFor('player')) {
+      $$('.cell').forEach(cell => {
+        if (!cell.querySelector('.unit')) cell.classList.add('revive-target');
+      });
+      showToast('请选择 ' + (unitById(pendingReviveFor('player').unitId)?.name || '灵宠') + ' 的复活位置');
+    } else if (state.phase === 'position' && selected && selected.side === 'player' && !selected.dead) {
       if (selected.rooted > 0) {
         showToast(selected.name + ' 本回合处于禁足状态', true);
       } else {
@@ -791,7 +999,8 @@
       return;
     }
     const hpPct = Math.max(0, Math.round(unit.hp / unit.maxHp * 100));
-    const enPct = Math.max(0, Math.round(unit.energy / unit.maxEnergy * 100));
+    const energyReference = Math.max(1, unit.abilityEnergyCost || 6);
+    const enPct = unit.energy > 0 ? Math.min(100, Math.round(unit.energy / energyReference * 100)) : 0;
     const equipped = skillList(unit.side).filter(item => item.owner === unit.id);
     const cat = petCatalog(unit.name);
     const explosionSkills = equipped.filter(item => item.explosionCost);
@@ -807,9 +1016,9 @@
       : '';
     detail.innerHTML =
       '<div class="focus-card"><div class="focus-top"><div class="focus-icon ' + (unit.side === 'enemy' ? 'enemy' : 'ally') + '">' + esc(unit.icon) + '</div><div><div class="focus-name">' + esc(unit.name) + '</div><div class="focus-sub">' + sideLabel(unit.side) + '灵宠 · ' + esc(unit.quality) + ' · 坐标 ' + coord(unit.pos) + '</div></div></div><p class="focus-effect">' + esc(unit.effect || cat.effect) + '</p></div>' +
-      '<div class="stat-grid"><div class="stat-box"><span>生命</span><strong>' + unit.hp + ' / ' + unit.maxHp + '</strong></div><div class="stat-box"><span>攻击 / 防御</span><strong>' + unit.atk + ' / ' + unit.def + '</strong></div><div class="stat-box"><span>能量</span><strong>' + unit.energy + ' / ' + unit.maxEnergy + '</strong></div><div class="stat-box"><span>护盾</span><strong>' + unit.shield + '</strong></div></div>' +
+      '<div class="stat-grid"><div class="stat-box"><span>生命</span><strong>' + unit.hp + ' / ' + unit.maxHp + '</strong></div><div class="stat-box"><span>攻击 / 防御</span><strong>' + unit.atk + ' / ' + unit.def + '</strong></div><div class="stat-box"><span>能量</span><strong>' + unit.energy + ' / ∞</strong></div><div class="stat-box"><span>护盾</span><strong>' + unit.shield + '</strong></div></div>' +
       '<div class="meter"><div class="meter-line"><span>生命状态</span><b>' + hpPct + '%</b></div><div class="meter-track"><i class="meter-fill" style="width:' + hpPct + '%"></i></div></div>' +
-      '<div class="meter"><div class="meter-line"><span>能量</span><b>' + unit.energy + ' / ' + unit.maxEnergy + '</b></div><div class="meter-track"><i class="meter-fill energy" style="width:' + enPct + '%"></i></div></div>' +
+      '<div class="meter"><div class="meter-line"><span>能量（无上限）</span><b>当前 ' + unit.energy + '</b></div><div class="meter-track"><i class="meter-fill energy" style="width:' + enPct + '%"></i></div></div>' +
       '<div class="detail-label">状态与定位</div><div class="tag-row">' + stateTags(unit).map(tag => '<span class="tag">' + esc(tag) + '</span>').join('') + '</div>' +
       abilityHtml +
       '<div class="detail-label">装备技能</div><div class="detail-skill-list">' + equippedHtml + '</div>' + explosionHtml;
@@ -864,15 +1073,18 @@
   }
 
   function renderTop() {
-    const stateText = state.phase === 'finished' ? '战斗结束' : state.auto ? '自动结算中' : state.phase === 'position' ? '等待部署' : '已暂停';
+    const awaitingRevive = !!pendingReviveFor('player');
+    const stateText = state.phase === 'finished' ? '战斗结束' : awaitingRevive ? '等待选择复活位置' : state.auto ? '自动结算中' : state.phase === 'position' ? '等待部署' : '已暂停';
     $('#battle-state-text').textContent = stateText;
     $('#turn-side-label').textContent = sideLabel(state.side) + '回合';
     $('#round-number').textContent = state.round;
     $('#action-number').textContent = state.action;
     const run = $('#run-btn');
-    run.textContent = state.phase === 'position' ? '开始战斗' : state.auto ? '暂停战斗' : state.phase === 'finished' ? '重新开始' : '继续战斗';
+    run.textContent = awaitingRevive ? '请选择复活位置' : state.phase === 'position' ? '开始战斗' : state.auto ? '暂停战斗' : state.phase === 'finished' ? '重新开始' : '继续战斗';
+    run.disabled = awaitingRevive;
     $('#auto-btn').textContent = state.auto ? '停止自动' : '自动播放';
-    $('#step-btn').disabled = state.phase === 'finished';
+    $('#auto-btn').disabled = awaitingRevive;
+    $('#step-btn').disabled = state.phase === 'finished' || awaitingRevive;
   }
 
   function renderAll() {
@@ -895,10 +1107,10 @@
     if (!unit || unit.dead || unit.hp <= 0 || unit.frost <= 0) return;
     const before = unit.frost;
     const damage = before * 2;
-    log('<strong>' + esc(unit.name) + '</strong> 因' + esc(reason || '位置改变') + '触发霜冻：层数 ' + before + '，造成 ' + damage + ' 点霜冻伤害。', 'trigger', 'FROST MOVE');
+    log('<strong>' + esc(unit.name) + '</strong> 因' + esc(reason || '位置改变') + '触发霜冻：层数 ' + logValue('frost', before) + '，造成 ' + logValue('frost', damage) + ' 点霜冻伤害。', 'trigger', 'FROST MOVE');
     damageUnit(null, unit, damage, {status:'霜冻', meta:'FROST MOVE'});
     unit.frost = Math.ceil(before / 2);
-    log('<strong>' + esc(unit.name) + '</strong> 霜冻触发后层数减半：' + before + ' → ' + unit.frost + '（向上取整）。', 'trigger', 'FROST MOVE');
+    log('<strong>' + esc(unit.name) + '</strong> 霜冻触发后层数减半：' + logValue('frost', before) + ' → ' + logValue('frost', unit.frost) + '（向上取整）。', 'trigger', 'FROST MOVE');
     trace(unit.name + ' 霜冻 ' + before + '→' + unit.frost, 'trigger');
   }
 
@@ -911,7 +1123,88 @@
     return true;
   }
 
+  function capturePositionSnapshot(side) {
+    const snapshot = new Map();
+    unitsOf(side, false).forEach(unit => snapshot.set(unit.id, unit.pos.slice()));
+    state.positionSnapshots[side] = snapshot;
+  }
+
+  function summarizePositionChanges(side) {
+    const snapshot = state.positionSnapshots[side] || new Map();
+    let changed = 0;
+    unitsOf(side, false).forEach(unit => {
+      const before = snapshot.get(unit.id);
+      if (!before || !unit.pos || (before[0] === unit.pos[0] && before[1] === unit.pos[1])) return;
+      changed += 1;
+      log('<strong>' + esc(unit.name) + '</strong> 移动阶段坐标变化：' + coord(before) + ' → ' + coord(unit.pos) + '。', 'trigger', 'POSITION SUMMARY');
+    });
+    if (!changed) log(sideLabel(side) + '移动阶段坐标变化：无。', 'trigger', 'POSITION SUMMARY');
+    capturePositionSnapshot(side);
+  }
+
+  function pendingReviveFor(side) {
+    return state.pendingRevives.find(item => item.side === side) || null;
+  }
+
+  function queueRevive(unit, forced = false) {
+    if (!unit || !unit.dead || state.pendingRevives.some(item => item.unitId === unit.id)) return;
+    state.pendingRevives.push({unitId: unit.id, side: unit.side, forced});
+    log('<strong>' + esc(unit.name) + '</strong> 满足复活条件，等待' + sideLabel(unit.side) + '操控者在移动阶段选择复活位置。', 'trigger', 'REVIVE');
+  }
+
+  function placePendingRevive(row, col) {
+    const pending = pendingReviveFor('player');
+    if (!pending) return false;
+    if (allUnits().some(unit => !unit.dead && unit.pos[0] === row && unit.pos[1] === col)) {
+      showToast('该位置已有灵宠，不能选择为复活位置', true);
+      return false;
+    }
+    const unit = unitById(pending.unitId);
+    if (!unit) return false;
+    state.pendingRevives = state.pendingRevives.filter(item => item !== pending);
+    reviveUnit(unit, pending.forced, [row, col]);
+    state.selectedId = unit.id;
+    state.selectedSkill = null;
+    if (pendingReviveFor('player')) {
+      state.selectedId = unitById(pendingReviveFor('player').unitId)?.id || state.selectedId;
+      log('请继续为下一只待复活灵宠选择位置。', 'trigger', 'REVIVE');
+    } else {
+      log('己方复活位置选择完成；点击开始战斗继续结算。', 'trigger', 'REVIVE');
+    }
+    renderAll();
+    return true;
+  }
+
+  function placeEnemyPendingRevives() {
+    pendingRevivesFor('enemy').forEach(pending => {
+      const unit = unitById(pending.unitId);
+      if (!unit) return;
+      const occupied = new Set(allUnits().filter(item => !item.dead && item.id !== unit.id).map(item => item.pos.join(',')));
+      let position = [0, unit.slot % COLS];
+      for (let row = 0; row < ROWS && occupied.has(position.join(',')); row += 1) {
+        for (let col = 0; col < COLS; col += 1) {
+          if (!occupied.has(row + ',' + col)) {
+            position = [row, col];
+            row = ROWS;
+            break;
+          }
+        }
+      }
+      state.pendingRevives = state.pendingRevives.filter(item => item !== pending);
+      reviveUnit(unit, pending.forced, position);
+      log('<strong>' + esc(unit.name) + '</strong> 敌方AI选择复活位置 ' + coord(position) + '。', 'trigger', 'AI REVIVE');
+    });
+  }
+
+  function pendingRevivesFor(side) {
+    return state.pendingRevives.filter(item => item.side === side);
+  }
+
   function handleCellClick(row, col) {
+    if (state.phase === 'position' && pendingReviveFor('player')) {
+      placePendingRevive(row, col);
+      return;
+    }
     const occupied = allUnits().find(unit => !unit.dead && unit.pos[0] === row && unit.pos[1] === col);
     if (occupied) {
       state.selectedId = occupied.id;
@@ -934,11 +1227,7 @@
       || equipped.find(skill => skillAvailability(skill) === '可用')
       || equipped[0]
       || null;
-    moveUnit(unit, [row, col], {
-      reason: '玩家移动',
-      meta: 'MOVE',
-      message: (old, next) => '<strong>' + esc(unit.name) + '</strong> 从 ' + coord(old) + ' 移动到 ' + coord(next) + '。'
-    });
+    moveUnit(unit, [row, col], {reason: '玩家移动'});
     renderAll();
   }
 
@@ -993,7 +1282,7 @@
   function addEnergy(unit, amount, reason) {
     if (!unit || unit.dead || !amount) return;
     const before = unit.energy;
-    unit.energy = Math.max(0, Math.min(unit.maxEnergy, unit.energy + amount));
+    unit.energy = Math.max(0, unit.energy + amount);
     const actual = unit.energy - before;
     if (actual) log('<strong>' + esc(unit.name) + '</strong> ' + esc(reason || '获得能量') + ' <strong>+' + actual + '</strong>，当前 ' + unit.energy + '。', 'trigger', 'ENERGY');
   }
@@ -1042,7 +1331,10 @@
   function addSkillGrowth(skill, field, amount, reason) {
     if (!skill || !amount) return;
     skill[field] = (skill[field] || 0) + amount;
-    log('<strong>' + esc(skill.name) + '</strong> ' + esc(reason || '获得成长') + ' <strong>+' + amount + '</strong>，当前 +' + skill[field] + '。', 'trigger', 'GROWTH');
+    const growthKind = field === 'damageBonus' ? 'damage' : field === 'burnBonus' ? 'burn' : field === 'poisonBonus' ? 'poison' : field === 'frostBonus' ? 'frost' : field === 'shieldBonus' || field === 'healBonus' || field === 'regenBonus' ? 'heal' : null;
+    const amountText = growthKind ? logValue(growthKind, '+' + amount) : '<strong>+' + amount + '</strong>';
+    const totalText = growthKind ? logValue(growthKind, '+' + skill[field]) : '<strong>+' + skill[field] + '</strong>';
+    log('<strong>' + esc(skill.name) + '</strong> ' + esc(reason || '获得成长') + ' ' + amountText + '，当前 ' + totalText + '。', 'trigger', 'GROWTH');
     trace(skill.name + ' ' + field + ' +' + amount, 'trigger');
   }
 
@@ -1108,6 +1400,87 @@
     return value;
   }
 
+  function simpleRuleTargets(skill, owner, scope, contextTargets) {
+    const context = (contextTargets || []).filter(target => target && !target.dead && target.hp > 0);
+    const selected = context.length ? context : targetsFor(skill, owner, owner.side);
+    let targets = [];
+    if (scope === '对自身') targets = [owner];
+    else if (scope === '对目标和自身') targets = [owner, ...selected];
+    else if (scope === '对我方全体') targets = unitsOf(owner.side, true);
+    else if (scope === '对敌方全体') targets = unitsOf(opponentSide(owner.side), true);
+    else targets = skill.rangeConfig && skill.rangeConfig.targetSide === '自身' ? [owner] : selected.filter(target => target.id !== owner.id);
+    return Array.from(new Map(targets.filter(target => target && !target.dead && target.hp > 0).map(target => [target.id, target])).values());
+  }
+
+  function addSimpleAmmo(target, amount, skillName) {
+    const reloadable = skillList(target.side).filter(candidate => candidate.owner === target.id && candidate.ammoMax && candidate.ammo < candidate.ammoMax);
+    let changed = 0;
+    reloadable.forEach(candidate => {
+      const before = candidate.ammo;
+      candidate.ammo = Math.min(candidate.ammoMax, candidate.ammo + amount);
+      changed += candidate.ammo - before;
+    });
+    log('<strong>' + esc(skillName) + '</strong> 为 <strong>' + esc(target.name) + '</strong> 的弹药技能补充 ' + changed + ' 枚弹药。', 'trigger', 'SIMPLE EFFECT');
+  }
+
+  function executeSimpleRule(skill, owner, rule, contextTargets) {
+    const countdown = rule.actions.find(action => action.type === '倒计时');
+    const explosion = rule.actions.find(action => action.type === '爆能');
+    const multi = rule.actions.find(action => action.type === '多重触发');
+    const stateKey = rule.timing + ':' + rule.id;
+    if (countdown) {
+      const current = skill.simpleRuleState[stateKey] == null ? countdown.value : skill.simpleRuleState[stateKey];
+      const next = Math.max(0, current - 1);
+      skill.simpleRuleState[stateKey] = next;
+      if (next > 0) {
+        log('<strong>' + esc(skill.name) + '</strong> 的' + esc(rule.timing) + '简化效果倒计时：' + next + '。', 'trigger', 'SIMPLE COUNTDOWN');
+        return;
+      }
+      skill.simpleRuleState[stateKey] = countdown.value;
+    }
+    if (explosion && !consumeEnergy(owner, explosion.value, skill.name + '简化效果爆能')) {
+      log('<strong>' + esc(skill.name) + '</strong> 的' + esc(rule.timing) + '简化效果需要爆能' + explosion.value + '，能量不足，本次不执行。', 'warn', 'SIMPLE EXPLOSION');
+      return;
+    }
+    const actions = rule.actions.filter(action => !['爆能', '倒计时', '多重触发'].includes(action.type));
+    const targets = simpleRuleTargets(skill, owner, rule.scope, contextTargets);
+    if (!targets.length) {
+      log('<strong>' + esc(skill.name) + '</strong> 的' + esc(rule.timing) + '简化效果没有符合条件的对象。', 'warn', 'SIMPLE TARGET');
+      return;
+    }
+    const repeats = Math.max(1, Math.min(99, multi ? multi.value : 1));
+    for (let repeat = 0; repeat < repeats; repeat += 1) {
+      actions.forEach(action => targets.slice().forEach(target => {
+        if (!target || target.dead || target.hp <= 0) return;
+        const reason = skill.name + '·' + rule.timing;
+        if (action.type === '充能') addEnergy(target, action.value, reason + '充能');
+        else if (action.type === '弹药') addSimpleAmmo(target, action.value, skill.name);
+        else if (action.type === '伤害') damageUnit(owner, target, action.value, {attackHit: rule.timing === '使用时', skipRetaliation: rule.timing === '被攻击时', meta:'SIMPLE EFFECT'});
+        else if (action.type === '治疗') healUnit(owner, target, action.value, reason);
+        else if (action.type === '护盾') applyShield(skill, target, action.value, reason);
+        else if (action.type === '再生') applyRegen(owner, target, action.value, reason);
+        else if (action.type === '点燃') applyBurn(owner, target, action.value, reason, owner.name === '花椒蟹');
+        else if (action.type === '剧毒') applyPoison(owner, target, action.value, reason);
+        else if (action.type === '霜冻') applyFrost(owner, target, action.value, reason);
+        else if (action.type === '亢奋') applyExcited(owner, target, action.value, reason);
+        else if (action.type === '衰弱') applyWeak(owner, target, action.value, reason);
+        else if (action.type === '拖拽') resolveDisplacement(skill, owner, target, 'pull', 0);
+        else if (action.type === '击退') resolveDisplacement(skill, owner, target, 'push', 0);
+      }));
+    }
+    log('<strong>' + esc(skill.name) + '</strong> 完成' + esc(rule.timing) + '简化效果' + (repeats > 1 ? '，共触发 ' + repeats + ' 次' : '') + '。', 'trigger', 'SIMPLE EFFECT');
+  }
+
+  function runSimpleRules(skill, timing, contextTargets) {
+    const owner = ownerOf(skill);
+    if (!owner || owner.dead || owner.hp <= 0) return;
+    (skill.simpleRules || []).filter(rule => rule.timing === timing).forEach(rule => executeSimpleRule(skill, owner, rule, contextTargets));
+  }
+
+  function runSimpleRulesForSide(timing, side) {
+    skillList(side).forEach(skill => runSimpleRules(skill, timing, []));
+  }
+
   function applyParalyze(source, target, amount, reason) {
     if (!target || target.dead || !amount) return 0;
     const value = Math.max(0, Math.round(amount));
@@ -1160,8 +1533,9 @@
     skillItems.filter(skill => skill.owner === owner.id && isPassiveSkill(skill)).forEach(passive => {
       if (passive.name === '锋锐鳞片' && !sharpScaleTriggers(passive, triggeringSkill, skillItems)) return;
       if (passive.name !== '连抓' && passive.name !== '锋锐鳞片') return;
-      log('<strong>' + esc(passive.name) + '</strong> 被动触发，继承 <strong>' + esc(triggeringSkill.name) + '</strong> 的 ' + inheritedTargets.length + ' 个目标。', 'trigger', 'PASSIVE');
-      inheritedTargets.slice().forEach(target => {
+      const passiveTargets = targetsForEffectScope(passive, owner, inheritedTargets, ['造成伤害', '发起攻击', '攻击']);
+      log('<strong>' + esc(passive.name) + '</strong> 被动触发，按效果描述对 ' + passiveTargets.length + ' 个目标结算。', 'trigger', 'PASSIVE');
+      passiveTargets.slice().forEach(target => {
         if (target.dead || target.hp <= 0) return;
         const value = genericAttackValue(passive, owner, 'damage');
         if (passive.name === '连抓') triggerBurnOnHit(owner, target, passive, value);
@@ -1181,14 +1555,15 @@
       absorbed = Math.min(target.shield, raw);
       target.shield -= absorbed;
       raw -= absorbed;
-      log('<strong>' + esc(target.name) + '</strong> 的护盾吸收 <strong>' + absorbed + '</strong> 点伤害。', 'trigger', 'SHIELD');
+      log('<strong>' + esc(target.name) + '</strong> 的护盾吸收 ' + logValue('shield', absorbed) + ' 点伤害。', 'trigger', 'SHIELD');
     }
     const defense = options.ignoreDefense ? 0 : Math.max(0, target.def);
     const actual = Math.max(0, raw - defense);
     if (actual > 0) {
       target.hp = Math.max(0, target.hp - actual);
       state.damage += actual;
-      log((source ? '<strong>' + esc(source.name) + '</strong> 对 ' : '') + '<strong>' + esc(target.name) + '</strong> 造成 <strong>' + actual + '</strong> 点' + (options.status ? esc(options.status) : '') + '伤害。', options.status ? 'trigger' : 'output', options.meta || 'DAMAGE');
+      const damageKind = options.status === '点燃' || options.status === '灼烧' ? 'burn' : options.status === '剧毒' || options.status === '淬毒' ? 'poison' : options.status === '霜冻' || options.status === '覆雪' ? 'frost' : 'damage';
+      log((source ? '<strong>' + esc(source.name) + '</strong> 对 ' : '') + '<strong>' + esc(target.name) + '</strong> 造成 ' + logValue(damageKind, actual) + ' 点' + (options.status ? esc(options.status) : '') + '伤害。', options.status ? 'trigger' : 'output', options.meta || 'DAMAGE');
       trace((options.status || '伤害') + ' ' + target.name + ' -' + actual, options.status ? 'trigger' : 'output');
     } else {
       log('<strong>' + esc(target.name) + '</strong> 的防御抵消了本次伤害。', 'trigger', options.meta || 'DEFENSE');
@@ -1201,11 +1576,14 @@
       }
     }
     if (options.attackHit && source && !source.dead && source.side !== target.side && !options.skipRetaliation) {
+      const attackedRules = skillList(target.side).filter(skill => skill.owner === target.id && (skill.simpleRules || []).some(rule => rule.timing === '被攻击时'));
+      attackedRules.forEach(skill => runSimpleRules(skill, '被攻击时', [source]));
       const retaliation = skillList(target.side).find(skill => skill.owner === target.id && skill.name === '饮血倒刺');
-      if (retaliation) {
+      if (retaliation && !(retaliation.simpleRules || []).some(rule => rule.timing === '被攻击时')) {
         const value = genericAttackValue(retaliation, target, 'damage');
-        log('<strong>' + esc(target.name) + '</strong> 的饮血倒刺被动触发，只对伤害来源 <strong>' + esc(source.name) + '</strong> 造成 ' + value + ' 点伤害。', 'trigger', 'BLOOD THORN');
-        damageUnit(target, source, value, {attackHit:false, skipRetaliation:true, meta:'BLOOD THORN'});
+        const retaliationTargets = targetsForEffectScope(retaliation, target, [source], ['造成伤害', '攻击']);
+        log('<strong>' + esc(target.name) + '</strong> 的饮血倒刺被动触发，按效果描述对 ' + retaliationTargets.length + ' 个目标结算。', 'trigger', 'BLOOD THORN');
+        retaliationTargets.forEach(retaliationTarget => damageUnit(target, retaliationTarget, value, {attackHit:false, skipRetaliation:true, meta:'BLOOD THORN'}));
       }
     }
     if (target.hp <= 0) killUnit(target, source);
@@ -1219,7 +1597,7 @@
     unit.reviveAt = state.round + 2;
     const hero = team(unit.side);
     hero.hp = Math.max(0, hero.hp - unit.maxHp);
-    log('<strong>' + esc(unit.name) + '</strong> 被击倒；' + sideLabel(unit.side) + '英雄失去 <strong>' + unit.maxHp + '</strong> 点生命，预计第 ' + unit.reviveAt + ' 回合复活。', 'warn', 'DEATH');
+    log('<strong>' + esc(unit.name) + '</strong> 被击倒；' + sideLabel(unit.side) + '英雄失去 ' + logValue('damage', unit.maxHp) + ' 点生命，预计第 ' + unit.reviveAt + ' 回合复活。', 'warn', 'DEATH');
     trace(unit.name + ' 阵亡，英雄 -' + unit.maxHp, 'output');
     if (source && source.name === '赤精鱼') addEnergy(source, 4, '赤精鱼击杀奖励');
     if (source && source.name === '幼熊') {
@@ -1231,11 +1609,11 @@
     if (hero.hp <= 0) finishBattle(opponentSide(unit.side));
   }
 
-  function reviveUnit(unit, forced) {
+  function reviveUnit(unit, forced, requestedPosition) {
     if (!unit || !unit.dead) return;
     const occupied = new Set(allUnits().filter(item => !item.dead && item.id !== unit.id).map(item => item.pos.join(',')));
     const preferredRow = unit.side === 'player' ? ROWS - 1 : 0;
-    let position = [preferredRow, unit.slot % COLS];
+    let position = Array.isArray(requestedPosition) ? requestedPosition.slice() : [preferredRow, unit.slot % COLS];
     if (occupied.has(position.join(','))) {
       for (let row = 0; row < ROWS; row += 1) {
         for (let col = 0; col < COLS; col += 1) {
@@ -1257,6 +1635,7 @@
     unit.shield = 0;
     unit.reviveAt = null;
     unit.pos = position;
+    if (state.positionSnapshots[unit.side]) state.positionSnapshots[unit.side].set(unit.id, position.slice());
     log('<strong>' + esc(unit.name) + '</strong> ' + (forced ? '被强制复活' : '复活') + '，回到 ' + coord(position) + '。', 'trigger', 'REVIVE');
   }
 
@@ -1350,9 +1729,9 @@
       const damage = valueFromEffect(unit.effect, [/技能伤害提升(\d+)/], 4);
       const ignite = valueFromEffect(unit.effect, [/点燃提升(\d+)/], 1);
       if (unit.energy >= cost && consumeEnergy(unit, cost, '赤精鱼回合开始爆能')) {
-        unit.roundSkillDamage += damage;
-        unit.roundIgnite += ignite;
-        log('赤精鱼爆能成功：本回合自身技能伤害 +' + damage + '，点燃 +' + ignite + '。', 'trigger', 'PET EXPLOSION');
+        unit.permanentSkillDamage += damage;
+        unit.permanentIgnite += ignite;
+        log('赤精鱼爆能成功：自身技能伤害 +' + damage + '、点燃 +' + ignite + '，持续至本场战斗结束。', 'trigger', 'PET EXPLOSION');
       } else {
         log('赤精鱼能量不足' + cost + '，本回合不触发爆能特性。', 'trigger', 'PET EXPLOSION');
       }
@@ -1385,6 +1764,21 @@
       const shield = valueFromEffect(unit.effect, [/获得(\d+)护盾/], 20);
       applyShield(null, unit, shield, '岩豚战斗开始');
     });
+    ['player', 'enemy'].forEach(side => {
+      runSimpleRulesForSide('战斗开始时', side);
+      skillList(side).forEach(skill => {
+        const battleStartText = skill.legacyEffect + ' ' + (Array.isArray(skill.tags) ? skill.tags.join(' ') : '');
+        if (skill.battleStartResolved || !/战斗开始时/.test(battleStartText)) return;
+        skill.battleStartResolved = true;
+        const startCountdown = parseFirst(battleStartText, [/战斗开始时进入倒计时\s*(\d+)/], 0);
+        if (startCountdown) {
+          skill.countdown = startCountdown;
+          log('<strong>' + esc(skill.name) + '</strong> 战斗开始时效果：不受技能栏位置影响，倒计时设为 ' + startCountdown + '。', 'trigger', 'BATTLE START');
+        } else {
+          log('<strong>' + esc(skill.name) + '</strong> 含有战斗开始时效果，按原始文案记录；当前未发现可独立解析的数值公式。', 'trigger', 'BATTLE START');
+        }
+      });
+    });
   }
 
   function startEffects(side) {
@@ -1392,10 +1786,10 @@
     state.roundEvents = 0;
     log('—— ' + sideLabel(side) + '第 ' + state.round + ' 回合开始：复活检查 ——', 'trigger', 'TURN START');
     const units = unitsOf(side, false);
-    units.filter(unit => unit.dead && unit.reviveAt != null && unit.reviveAt <= state.round).forEach(unit => reviveUnit(unit, false));
+    units.filter(unit => unit.dead && unit.reviveAt != null && unit.reviveAt <= state.round).forEach(unit => queueRevive(unit, false));
     if (!unitsOf(side, true).length) {
       const forced = units.find(unit => unit.dead);
-      if (forced) reviveUnit(forced, true);
+      if (forced) queueRevive(forced, true);
     }
     resetDefense(side);
     log('—— ' + sideLabel(side) + '回合开始：倒计时与灵宠被动 ——', 'trigger', 'TURN START');
@@ -1404,6 +1798,7 @@
     startEnergy(side);
     log('—— ' + sideLabel(side) + '回合开始：状态伤害与增益 ——', 'trigger', 'TURN START');
     startStatus(side);
+    runSimpleRulesForSide('回合开始', side);
     log('—— ' + sideLabel(side) + '回合开始效果结算完毕 ——', 'trigger', 'TURN START');
   }
 
@@ -1413,10 +1808,10 @@
     const actual = Math.min(value, target.maxHp - target.hp);
     if (actual > 0) {
       target.hp += actual;
-      log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 恢复 <strong>' + actual + '</strong> 点生命。', 'trigger', 'HEAL');
+      log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 恢复 ' + logValue('heal', actual) + ' 点生命。', 'trigger', 'HEAL');
       trace(target.name + ' 治疗 +' + actual, 'trigger');
     } else {
-      log('<strong>' + esc(target.name) + '</strong> 已满生命，治疗没有溢出。', 'trigger', 'HEAL');
+      log('<strong>' + esc(target.name) + '</strong> 治疗量 ' + logValue('heal', value) + '，但已满生命，治疗没有溢出。', 'trigger', 'HEAL');
     }
     if (target.name === '沼泽鼠' && actual > 0) {
       const enemy = unitsOf(opponentSide(target.side), true).sort((a, b) => a.hp - b.hp)[0];
@@ -1430,7 +1825,7 @@
     if (!target || target.dead || !amount) return 0;
     const value = Math.max(0, Math.round(amount));
     target.regen += value;
-    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得再生 +' + value + '，当前 ' + target.regen + '。', 'trigger', 'STATUS');
+    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得再生 +' + logValue('heal', value) + '，当前 ' + logValue('heal', target.regen) + '。', 'trigger', 'STATUS');
     trace(target.name + ' 再生 +' + value, 'trigger');
     return value;
   }
@@ -1446,7 +1841,7 @@
     const old = target.poison;
     if (target.name === '蕈章' && target.shield > 0) value *= 2;
     target.poison += value;
-    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得剧毒 +' + value + '，当前 ' + target.poison + '。', 'trigger', 'POISON');
+    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得剧毒 +' + logValue('poison', value) + '，当前 ' + logValue('poison', target.poison) + '。', 'trigger', 'POISON');
     trace(target.name + ' 剧毒 +' + value, 'trigger');
     const blackRoses = [];
     if (source && source.name === '黑玫瑰' && !source.dead) blackRoses.push(source);
@@ -1473,7 +1868,7 @@
     const value = Math.max(1, Math.round(amount || 0));
     const old = target.frost;
     target.frost += value;
-    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得霜冻 +' + value + '，当前 ' + target.frost + '。', 'trigger', 'FROST');
+    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得霜冻 +' + logValue('frost', value) + '，当前 ' + logValue('frost', target.frost) + '。', 'trigger', 'FROST');
     trace(target.name + ' 霜冻 +' + value, 'trigger');
     if (old > 0) {
       const defenseBefore = Math.max(0, target.def);
@@ -1482,7 +1877,7 @@
       const shieldLoss = value * 3;
       target.def = Math.max(0, target.def - defenseLoss);
       target.shield = Math.max(0, target.shield - shieldLoss);
-      log('<strong>' + esc(target.name) + '</strong> 已有霜冻，覆雪额外削减防御 ' + defenseLoss + '（' + defenseBefore + ' → ' + target.def + '），护盾 ' + shieldLoss + '（' + shieldBefore + ' → ' + target.shield + '）。', 'warn', 'FROST PROC');
+      log('<strong>' + esc(target.name) + '</strong> 已有霜冻，覆雪额外削减防御 ' + defenseLoss + '（' + defenseBefore + ' → ' + target.def + '），护盾 ' + logValue('shield', shieldLoss) + '（' + shieldBefore + ' → ' + target.shield + '）。', 'warn', 'FROST PROC');
       trace(target.name + ' 霜冻削防/护盾', 'trigger');
     }
   }
@@ -1492,11 +1887,11 @@
     const value = Math.max(1, Math.round(amount || 0));
     const old = target.burn;
     target.burn += value;
-    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得灼烧 +' + value + '，当前 ' + target.burn + '。', 'trigger', 'BURN');
+    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得灼烧 +' + logValue('burn', value) + '，当前 ' + logValue('burn', target.burn) + '。', 'trigger', 'BURN');
     trace(target.name + ' 灼烧 +' + value, 'trigger');
     if (old > 0) {
       damageUnit(source, target, value * 2, {status:'点燃', meta:'IGNITE PROC'});
-      log('目标已有灼烧，点燃额外造成 ' + value * 2 + ' 点伤害。', 'output', 'IGNITE PROC');
+      log('目标已有灼烧，点燃额外造成 ' + logValue('burn', value * 2) + ' 点伤害。', 'output', 'IGNITE PROC');
     }
     const crab = source && source.name === '花椒蟹' && !source.dead ? source : null;
     if (crab && attackHit && target.hp > 0) {
@@ -1513,7 +1908,7 @@
     const burnDamage = target.burn;
     damageUnit(attacker, target, burnDamage, {status:'灼烧', meta:'BURN PROC'});
     target.burn = Math.max(1, Math.floor(target.burn * 0.9));
-    log('<strong>' + esc(target.name) + '</strong> 被攻击技能命中，灼烧追加 ' + burnDamage + '，层数按10%衰减至 ' + target.burn + '。', 'trigger', 'BURN PROC');
+    log('<strong>' + esc(target.name) + '</strong> 被攻击技能命中，灼烧追加 ' + logValue('burn', burnDamage) + '，层数按10%衰减至 ' + logValue('burn', target.burn) + '。', 'trigger', 'BURN PROC');
     if (attacker && attacker.name === '白蔷薇') {
       const heal = valueFromEffect(attacker.effect, [/治疗(\d+)点生命/], 7);
       healRandomAlly(attacker, heal, '白蔷薇自身攻击触发灼烧伤害');
@@ -1531,7 +1926,7 @@
       target.excited -= 1;
     }
     target.shield += value;
-    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得护盾 <strong>+' + value + '</strong>。', 'trigger', 'SHIELD');
+    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得护盾 ' + logValue('shield', '+' + value) + '。', 'trigger', 'SHIELD');
     trace(target.name + ' 护盾 +' + value, 'trigger');
     if (target.name === '鲛人抢手' && value > 0) {
       const skill = skillList(target.side).find(item => item.owner === target.id && !isPassiveSkill(item));
@@ -1684,13 +2079,14 @@
       }
     }
     let countdownAdvanced = false;
-    if (!targets.length && !skillIsSupport(skill) && skill.name !== '轻击') {
+    if (!targets.length && (skill.rangeConfig || !skillIsSupport(skill)) && skill.name !== '轻击') {
       if (skill.baseCountdown && skill.countdown > 0 && !immediateUse) {
         advanceCountdown(skill);
         countdownAdvanced = true;
         log('<strong>' + esc(skill.name) + '</strong> 范围内没有敌人，本次不使用技能效果，但按规则继续减少倒计时。', 'trigger', 'COUNTDOWN');
       } else {
-        log('<strong>' + esc(skill.name) + '</strong> 攻击范围内没有敌方灵宠，不消耗弹药、不触发爆能，也不重置倒计时。', 'warn', 'TARGET');
+        const targetLabel = skill.rangeConfig ? skill.rangeConfig.targetSide : '敌方';
+        log('<strong>' + esc(skill.name) + '</strong> 攻击范围内没有' + targetLabel + '灵宠，不消耗弹药、不触发爆能，也不重置倒计时。', 'warn', 'TARGET');
         trace(skill.name + ' 无目标', 'trigger');
       }
       renderAll();
@@ -1755,15 +2151,16 @@
       }
     }
     const regularEffectReady = countdownEffectReady || (!skill.countdownTailOnly && (!skill.explosionTailOnly || explosion));
-    const multi = parseFirst(skill.effect, [/多重触发\s*(\d+)/], 1);
+    const multi = parseFirst(skill.legacyEffect, [/多重触发\s*(\d+)/], 1);
     const valueTargets = targets.length ? targets : [owner];
     const shieldValue = primaryValueBreakdown(skill, owner, 'shield').value;
     const healValue = primaryValueBreakdown(skill, owner, 'heal').value;
     const regenValue = primaryValueBreakdown(skill, owner, 'regen').value;
     log('<strong>' + esc(owner.name) + '</strong> 使用 <strong>' + esc(skill.name) + '</strong>，按技能栏顺序结算（' + label + '）。', 'trigger', 'SKILL');
     trace(owner.name + ' → ' + skill.name, 'trigger');
+    runSimpleRules(skill, '使用时', targets);
 
-    const charge = parseFirst(skill.effect, [/充能\s*(\d+)/], 0);
+    const charge = parseFirst(skill.legacyEffect, [/充能\s*(\d+)/], 0);
     if (charge) addEnergy(owner, charge, skill.name + '技能');
     if (skill.name === '吐纳术' && explosion) {
       const amount = valueFromEffect(skill.effect, [/提升(\d+)点攻击/], 2);
@@ -1776,11 +2173,11 @@
     if (shieldValue && /护盾|护甲/.test(skill.ability + skill.effect)) {
       const shieldTargets = skill.name === '蜕壳投掷' || skill.name === '凝血铠甲' || skill.name === '披甲' || skill.name === '叠甲'
         ? [owner]
-        : valueTargets;
+        : targetsForEffectScope(skill, owner, valueTargets, ['护盾', '护甲']);
       shieldTargets.filter(target => target && !target.dead).forEach(target => applyShield(skill, target, shieldValue, skill.name));
     }
-    if (healValue && /治疗/.test(skill.ability)) valueTargets.filter(target => target && !target.dead).forEach(target => healUnit(owner, target, healValue, skill.name));
-    if (regenValue && /再生/.test(skill.ability) && skill.name !== '泰诺地龙') valueTargets.filter(target => target && !target.dead).forEach(target => applyRegen(owner, target, regenValue, skill.name));
+    if (healValue && /治疗/.test(skill.ability)) targetsForEffectScope(skill, owner, valueTargets, ['治疗', '恢复生命']).forEach(target => healUnit(owner, target, healValue, skill.name));
+    if (regenValue && /再生/.test(skill.ability) && skill.name !== '泰诺地龙') targetsForEffectScope(skill, owner, valueTargets, ['再生']).forEach(target => applyRegen(owner, target, regenValue, skill.name));
     if (skill.name === '使劲') {
       const amount = valueFromEffect(skill.effect, [/获得(\d+)点技能伤害提升/], 2);
       skillList(side).filter(item => item.owner === owner.id).forEach(item => addSkillGrowth(item, 'damageBonus', amount, '使劲自身技能成长'));
@@ -1802,28 +2199,46 @@
     }
 
     const burnSkill = (/引火|天火咒|火球|鞭炮|妒火|热流沙/.test(skill.name) || /点燃/.test(skill.ability))
-      && (!skill.explosionCost || explosion || !/爆能/.test(skill.effect))
+      && (!skill.explosionCost || explosion || !/爆能/.test(skill.legacyEffect))
       && regularEffectReady;
     const poisonSkill = /毒钩|毒雾|蜈蚣锁|寒蛇影|蛇影寒|泰诺地龙|毒腺/.test(skill.name) || /淬毒/.test(skill.ability);
     const frostSkill = /覆雪|结霜/.test(skill.name + ' ' + skill.ability) && regularEffectReady;
     const frostValue = valueEntriesOf(skill).find(entry => entry.kind === 'frost');
-    const directDamage = valueEntriesOf(skill).some(entry => entry.kind === 'damage') || /造成伤害/.test(skill.effect);
+    const directDamage = valueEntriesOf(skill).some(entry => entry.kind === 'damage') || /造成伤害/.test(skill.legacyEffect);
     const critical = attackSkill && regularEffectReady ? triggerCritical(owner, skill, targets) : false;
     const directTargets = targets.length ? targets : [owner];
-    directTargets.forEach(target => {
+    const damageTargets = targetsForEffectScope(skill, owner, directTargets, ['造成伤害', '发起攻击', '攻击']);
+    const burnTargets = burnSkill ? targetsForEffectScope(skill, owner, directTargets, ['点燃', '灼烧']) : [];
+    const poisonTargets = poisonSkill && regularEffectReady ? targetsForEffectScope(skill, owner, directTargets, ['剧毒', '淬毒']) : [];
+    const frostTargets = frostSkill ? targetsForEffectScope(skill, owner, directTargets, ['霜冻', '覆雪', '结霜']) : [];
+    const effectTargets = Array.from(new Map([...damageTargets, ...burnTargets, ...poisonTargets, ...frostTargets].map(target => [target.id, target])).values());
+    const damageTargetIds = new Set(damageTargets.map(target => target.id));
+    const burnTargetIds = new Set(burnTargets.map(target => target.id));
+    const poisonTargetIds = new Set(poisonTargets.map(target => target.id));
+    const frostTargetIds = new Set(frostTargets.map(target => target.id));
+    effectTargets.forEach(target => {
       if (!regularEffectReady) return;
-      if (attackSkill && !target.dead && target.side !== owner.side && regularEffectReady) triggerBurnOnHit(owner, target, skill, genericAttackValue(skill, owner, 'damage'));
-      if (burnSkill && target.side !== owner.side) {
+      const triggerCount = Math.max(1, multi);
+      if (!directDamage && attackSkill && damageTargetIds.has(target.id) && !target.dead) {
+        for (let hit = 0; hit < triggerCount; hit += 1) {
+          if (target.dead || target.hp <= 0) break;
+          if (target.side !== owner.side) triggerBurnOnHit(owner, target, skill, genericAttackValue(skill, owner, 'damage'));
+        }
+      }
+      if (burnTargetIds.has(target.id)) {
         const burn = genericAttackValue(skill, owner, 'burn');
         for (let hit = 0; hit < Math.max(1, multi); hit += 1) applyBurn(owner, target, burn, skill.name + '点燃', owner.name === '花椒蟹');
-      } else if (poisonSkill && regularEffectReady && target.side !== owner.side) {
+      }
+      if (poisonTargetIds.has(target.id)) {
         applyPoison(owner, target, genericAttackValue(skill, owner, 'poison'), skill.name + '淬毒');
       }
-      if (frostSkill && frostValue && attackSkill && target.side !== owner.side && target.hp > 0) {
+      if (frostTargetIds.has(target.id) && frostValue && attackSkill && target.hp > 0) {
         applyFrost(owner, target, valueBreakdown(skill, owner, frostValue).value, skill.name + '覆雪');
       }
-      if (directDamage && attackSkill && target.side !== owner.side && target.hp > 0 && regularEffectReady) {
+      if (damageTargetIds.has(target.id) && directDamage && attackSkill && target.hp > 0 && regularEffectReady) {
         for (let i = 0; i < multi; i += 1) {
+          if (target.dead || target.hp <= 0) break;
+          if (target.side !== owner.side) triggerBurnOnHit(owner, target, skill, genericAttackValue(skill, owner, 'damage'));
           let value = genericAttackValue(skill, owner, 'damage');
           if (owner.name === '饿狼' && owner.firstMartialReady && /武技|攻击/.test(skill.type + skill.tags)) {
             value *= 2;
@@ -1854,10 +2269,7 @@
         });
       });
     }
-    if (skill.name === '蜈蚣锁' && owner.hp > 0 && regularEffectReady) applyPoison(owner, owner, genericAttackValue(skill, owner, 'poison'), '蜈蚣锁自毒');
     if (skill.name === '泰诺地龙' && owner.hp > 0 && regularEffectReady) {
-      const poison = primaryValueBreakdown(skill, owner, 'poison').value;
-      applyPoison(owner, owner, poison, '泰诺地龙自毒');
       applyRegen(owner, owner, primaryValueBreakdown(skill, owner, 'regen').value, '泰诺地龙再生');
       applyExcited(owner, owner, valueFromEffect(skill.effect, [/亢奋(\d+)/], 2), '泰诺地龙亢奋');
     }
@@ -1899,6 +2311,7 @@
 
   function endEffects(side) {
     state.phase = 'end-resolving';
+    runSimpleRulesForSide('回合结束', side);
     log('—— ' + sideLabel(side) + '第 ' + state.round + ' 回合结束：状态伤害 ——', 'trigger', 'TURN END');
     unitsOf(side, true).forEach(unit => {
       if (unit.poison > 0) {
@@ -1925,7 +2338,21 @@
     state.side = 'player';
     state.playerCursor = 0;
     state.trace = [];
-    startEffects('player');
+    if (!state.turnStartResolved) {
+      startEffects('player');
+      state.turnStartResolved = true;
+    }
+    if (pendingReviveFor('player')) {
+      state.phase = 'position';
+      state.auto = false;
+      state.running = false;
+      stopAuto();
+      state.selectedId = pendingReviveFor('player').unitId;
+      log('己方进入开始移动阶段，请先选择复活位置。', 'trigger', 'REVIVE');
+      renderAll();
+      return;
+    }
+    summarizePositionChanges('player');
     state.phase = 'resolving';
     log('己方完成部署，开始按技能栏从左到右结算。', 'trigger', 'PLAYER ACTION');
     renderAll();
@@ -1948,11 +2375,7 @@
         const candidate = [Math.max(0, Math.min(ROWS - 1, enemy.pos[0] + dr)), Math.max(0, Math.min(COLS - 1, enemy.pos[1] + dc))];
         const occupied = allUnits().some(unit => !unit.dead && unit.id !== enemy.id && unit.pos[0] === candidate[0] && unit.pos[1] === candidate[1]);
         if (!occupied) {
-          moveUnit(enemy, candidate, {
-            reason: '敌方AI移动',
-            meta: 'AI MOVE',
-            message: (old, next) => '<strong>' + esc(enemy.name) + '</strong> AI 向最近目标移动：' + coord(old) + ' → ' + coord(next) + '。'
-          });
+          moveUnit(enemy, candidate, {reason: '敌方AI移动'});
         }
       } else {
         log('<strong>' + esc(enemy.name) + '</strong> 选择技能 <strong>' + esc(skill.name) + '</strong>，目标按范围内最低生命值确定。', 'trigger', 'AI SELECT');
@@ -1966,9 +2389,13 @@
     state.enemyCursor = 0;
     state.trace = [];
     startEffects('enemy');
+    state.turnStartResolved = true;
     state.phase = 'enemy-position';
     log('—— 敌方自动走位阶段：按确定性 AI 选择最近目标 ——', 'trigger', 'AI TURN');
+    capturePositionSnapshot('enemy');
+    placeEnemyPendingRevives();
     moveEnemyAI();
+    summarizePositionChanges('enemy');
     state.phase = 'enemy-resolving';
     log('对手完成自动走位，开始按敌方技能栏顺序结算。', 'trigger', 'ENEMY ACTION');
     renderAll();
@@ -1987,10 +2414,15 @@
     if (state.winner) return;
     state.round += 1;
     state.side = 'player';
-    state.phase = 'position';
     state.playerCursor = 0;
     state.roundEvents = 0;
+    state.turnStartResolved = false;
+    capturePositionSnapshot('player');
+    capturePositionSnapshot('enemy');
     log('对手回合结束，进入第 ' + state.round + ' 回合。己方可以重新走位并调整技能顺序。', 'trigger', 'ROUND');
+    startEffects('player');
+    state.turnStartResolved = true;
+    state.phase = 'position';
     renderAll();
   }
 
@@ -2160,7 +2592,7 @@
   }
 
   function previewOwner(petItem) {
-    if (!petItem || !petItem.name) return {id:'preview-owner', side:'player', name:'未分配', quality:'—', atk:0, def:0, hp:0, maxHp:0, dead:false, energy:0, maxEnergy:12};
+    if (!petItem || !petItem.name) return {id:'preview-owner', side:'player', name:'未分配', quality:'—', atk:0, def:0, hp:0, maxHp:0, dead:false, energy:0, maxEnergy:Infinity};
     const cat = petCatalog(petItem && petItem.name);
     const quality = petItem && petItem.quality || cat.tier || '青铜';
     const scale = qualityScale(cat, quality);
@@ -2170,7 +2602,7 @@
     const effect = String(qualityField(cat, quality, '一句话效果', cat.effect) || '暂无简述');
     const abilityEnergyCost = parseFirst(effect, [/消耗\s*(\d+)\s*点能量/], 0);
     const abilityCountdownMax = parseFirst(effect, [/倒计时\s*(\d+)/], 0);
-    return {id:'preview-owner', side:'player', name:petItem && petItem.name || '未分配', quality, atk, def, hp, maxHp:hp, dead:false, energy:0, maxEnergy:12, effect, abilityEnergyCost, abilityCountdownMax, abilityCountdown:abilityCountdownMax};
+    return {id:'preview-owner', side:'player', name:petItem && petItem.name || '未分配', quality, atk, def, hp, maxHp:hp, dead:false, energy:0, maxEnergy:Infinity, effect, abilityEnergyCost, abilityCountdownMax, abilityCountdown:abilityCountdownMax};
   }
 
   function previewSkill(skillItem, owner) {
@@ -2232,6 +2664,16 @@
   function closeConfigInfo() {
     state.configInfo = null;
     const modal = $('#config-info-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function openGuide() {
+    const modal = $('#guide-modal');
+    if (modal) modal.hidden = false;
+  }
+
+  function closeGuide() {
+    const modal = $('#guide-modal');
     if (modal) modal.hidden = true;
   }
 
@@ -2449,6 +2891,7 @@
   $('#run-btn').addEventListener('click', startOrPause);
   $('#auto-btn').addEventListener('click', toggleAuto);
   $('#reset-btn').addEventListener('click', resetAll);
+  $('#guide-btn').addEventListener('click', openGuide);
   $('#config-btn').addEventListener('click', openSetup);
   $('#close-setup').addEventListener('click', closeSetup);
   $('#cancel-setup').addEventListener('click', closeSetup);
@@ -2470,10 +2913,15 @@
   $('#config-info-modal').addEventListener('click', event => {
     if (event.target.id === 'config-info-modal') closeConfigInfo();
   });
+  $('#close-guide').addEventListener('click', closeGuide);
+  $('#guide-modal').addEventListener('click', event => {
+    if (event.target.id === 'guide-modal') closeGuide();
+  });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       closeSkillInfo();
       closeConfigInfo();
+      closeGuide();
     }
   });
   $('#clear-log').addEventListener('click', () => {
