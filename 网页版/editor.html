@@ -60,6 +60,7 @@
         <div id="skill-fields" class="form-grid kind-fields">
           <label class="field"><span>能力</span><input name="能力" placeholder="例如：攻击12+"></label>
           <label class="field"><span>防御</span><input name="skill-defense" inputmode="decimal" placeholder="0"></label>
+          <label class="field full"><span>使用方式</span><select name="skill-activation"><option>主动</option><option>被动</option></select></label>
           <label class="field full"><span>射程 / 目标摘要 <small>由下方配置自动生成</small></span><input name="射程/目标" readonly></label>
           <section class="range-editor field full" aria-labelledby="range-editor-title">
             <div class="range-editor-heading">
@@ -81,28 +82,6 @@
             <div id="range-grid" class="range-grid" role="grid" aria-label="9乘9攻击范围编辑器"></div>
             <p id="range-help" class="range-help">无条件技能：点击棋盘设置红色命中格。</p>
           </section>
-          <section class="simple-effect-builder field full" aria-labelledby="simple-effect-title">
-            <div class="simple-effect-heading">
-              <div><span id="simple-effect-title">简化效果编辑</span><small>组合常用触发与效果，再应用到下方效果栏</small></div>
-              <button id="simple-effect-read" type="button">从效果栏读取</button>
-            </div>
-            <fieldset class="simple-timings"><legend>触发时机（可多选）</legend>
-              <label><input type="checkbox" name="simple-timing" value="战斗开始时">战斗开始时</label>
-              <label><input type="checkbox" name="simple-timing" value="回合开始">回合开始</label>
-              <label><input type="checkbox" name="simple-timing" value="回合结束">回合结束</label>
-              <label><input type="checkbox" name="simple-timing" value="被攻击时">被攻击时</label>
-              <label><input type="checkbox" name="simple-timing" value="使用时">使用时</label>
-            </fieldset>
-            <div class="simple-effect-controls">
-              <label class="field"><span>作用对象</span><select id="simple-effect-scope"><option>对目标</option><option>对自身</option><option>对目标和自身</option><option>对我方全体</option><option>对敌方全体</option></select></label>
-              <label class="field"><span>泛用效果</span><select id="simple-effect-action"><option>充能</option><option>弹药</option><option>拖拽</option><option>击退</option><option>爆能</option><option>倒计时</option><option>多重触发</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>剧毒</option><option>霜冻</option><option>亢奋</option><option>衰弱</option></select></label>
-              <label class="field simple-value-field"><span>数值 X</span><input id="simple-effect-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
-              <button id="simple-effect-add" type="button">加入所选时机</button>
-            </div>
-            <div id="simple-effect-list" class="simple-effect-list" aria-live="polite"></div>
-            <div class="simple-effect-actions"><button id="simple-effect-clear" type="button">清空草稿</button><button id="simple-effect-apply" type="button">应用到效果栏</button></div>
-            <p>应用只更新以【触发时机】开头的简化规则，保留其它手写内容。爆能是能量门槛，倒计时是触发间隔，多重触发会重复同组效果。</p>
-          </section>
           <label class="field full"><span>效果 <small>可自由输入完整规则文本</small></span><textarea name="效果" rows="7" placeholder="主动输入技能效果、触发条件与限制"></textarea></label>
           <label class="field"><span>定位</span><input name="定位" placeholder="例如：核心输出"></label>
         </div>
@@ -114,6 +93,35 @@
           <label class="field full"><span>效果 <small>可自由输入完整规则文本</small></span><textarea name="一句话效果" rows="6" placeholder="主动输入灵宠效果、触发条件与限制"></textarea></label>
           <label class="field full"><span>升级理由</span><textarea name="升级理由" rows="3" placeholder="说明不同品质的成长与设计意图"></textarea></label>
         </div>
+        <section class="simple-effect-builder field full" aria-labelledby="simple-effect-title">
+          <div class="simple-effect-heading">
+            <div><span id="simple-effect-title">简化效果编辑</span><small>组合常用触发与效果，再应用到当前条目的效果栏</small></div>
+            <button id="simple-effect-read" type="button">从效果栏读取</button>
+          </div>
+          <fieldset class="simple-timings"><legend>触发时机（可多选）</legend>
+            <label><input type="checkbox" name="simple-timing" value="战斗开始时">战斗开始时</label>
+            <label><input type="checkbox" name="simple-timing" value="回合开始">回合开始</label>
+            <label><input type="checkbox" name="simple-timing" value="回合结束">回合结束</label>
+            <label><input type="checkbox" name="simple-timing" value="被攻击时">被攻击时</label>
+            <label><input type="checkbox" name="simple-timing" value="使用时">使用时</label>
+          </fieldset>
+          <div class="simple-effect-controls">
+            <label class="field"><span>作用对象</span><select id="simple-effect-scope"><option>对目标</option><option>对自身</option><option>对目标和自身</option><option>对我方全体</option><option>对敌方全体</option><option>左侧相邻技能</option><option>右侧相邻技能</option><option>灵兽自身技能</option><option>己方所有技能</option></select></label>
+            <label class="field"><span>泛用效果</span><select id="simple-effect-action"><option>充能</option><option>装填弹药</option><option>拖拽</option><option>击退</option><option>爆能</option><option>倒计时</option><option>多重触发</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>剧毒</option><option>霜冻</option><option>亢奋</option><option>衰弱</option></select></label>
+            <label class="field simple-value-field"><span>数值 X</span><input id="simple-effect-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
+            <button id="simple-effect-add" type="button">加入所选时机</button>
+          </div>
+          <div id="simple-gate-options" class="simple-gate-options" hidden>
+            <label class="field"><span>爆能 / 倒计时生效方式</span><select id="simple-gate-mode"><option>额外效果</option><option>应用于此技能</option></select></label>
+            <div id="simple-extra-controls" class="simple-extra-controls">
+              <label class="field"><span>额外泛用效果</span><select id="simple-extra-action"><option>充能</option><option>装填弹药</option><option>拖拽</option><option>击退</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>剧毒</option><option>霜冻</option><option>亢奋</option><option>衰弱</option></select></label>
+              <label class="field simple-value-field"><span>额外数值 X</span><input id="simple-extra-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
+            </div>
+          </div>
+          <div id="simple-effect-list" class="simple-effect-list" aria-live="polite"></div>
+          <div class="simple-effect-actions"><button id="simple-effect-clear" type="button">清空草稿</button><button id="simple-effect-apply" type="button">应用到效果栏</button></div>
+          <p id="simple-effect-help">应用只更新以【触发时机】开头的简化规则，并保留其它手写内容。</p>
+        </section>
         <div class="form-grid common-details">
           <label class="field full"><span>主要配合对象</span><input name="主要配合对象" placeholder="可选"></label>
           <label class="field"><span>套路</span><input name="套路" placeholder="例如：点燃流"></label>

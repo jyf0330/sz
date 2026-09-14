@@ -11,8 +11,11 @@
   const targetSides = ['敌方', '友方', '自身', '自身与友方', '自身与敌方'];
   const rangeConditions = ['生命最低', '生命最高', '攻击最高', '防御最低', '防御最高', '最前方', '最后方', '带有点燃', '带有剧毒', '带有霜冻', '带有护盾', '随机1个目标', '随机2个目标', '随机3个目标'];
   const simpleTimings = ['战斗开始时', '回合开始', '回合结束', '被攻击时', '使用时'];
-  const simpleScopes = ['对目标', '对自身', '对目标和自身', '对我方全体', '对敌方全体'];
-  const simpleActions = ['充能', '弹药', '拖拽', '击退', '爆能', '倒计时', '多重触发', '伤害', '治疗', '护盾', '再生', '点燃', '剧毒', '霜冻', '亢奋', '衰弱'];
+  const simpleScopes = ['对目标', '对自身', '对目标和自身', '对我方全体', '对敌方全体', '左侧相邻技能', '右侧相邻技能', '灵兽自身技能', '己方所有技能'];
+  const simpleSkillScopes = new Set(['左侧相邻技能', '右侧相邻技能', '灵兽自身技能', '己方所有技能']);
+  const simpleActions = ['充能', '装填弹药', '拖拽', '击退', '爆能', '倒计时', '多重触发', '伤害', '治疗', '护盾', '再生', '点燃', '剧毒', '霜冻', '亢奋', '衰弱'];
+  const simpleExtraActions = simpleActions.filter(action => !['爆能', '倒计时', '多重触发'].includes(action));
+  const simpleGates = new Set(['爆能', '倒计时']);
   const simpleModifiers = new Set(['爆能', '倒计时', '多重触发']);
   const sharedBindings = [
     {field: '主要配合对象', input: '主要配合对象'},
@@ -22,6 +25,7 @@
   const skillBindings = [
     {field: '能力', input: '能力'},
     {field: '防御', input: 'skill-defense', numeric: true},
+    {field: '主动/被动', input: 'skill-activation'},
     {field: '效果', input: '效果'},
     {field: '定位', input: '定位'}
   ];
@@ -315,28 +319,65 @@
     return item.kind === '灵兽' ? '一句话效果' : '效果';
   }
 
+  function activationFor(item, fields) {
+    if (fields && (fields['主动/被动'] === '主动' || fields['主动/被动'] === '被动')) return fields['主动/被动'];
+    return /被动/.test(((fields || {})['效果'] || '') + ((fields || {})['词条'] || '')) || ['连抓', '锋锐鳞片', '饮血倒刺'].includes(item.name) ? '被动' : '主动';
+  }
+
   function simpleActionNeedsValue(action) {
     return action !== '拖拽' && action !== '击退';
   }
 
+  function normalizeSimpleAction(action) {
+    return action === '弹药' ? '装填弹药' : action;
+  }
+
+  function simpleRulePattern() {
+    return new RegExp(`【(${simpleTimings.join('|')})】(${simpleScopes.join('|')})：([^。\\n]+)。?`, 'g');
+  }
+
+  function parseSimpleAction(part) {
+    const gate = part.match(/^(爆能|倒计时)\s*(\d+)?(?:[（(](额外效果|应用于此技能)(?:[：:](?:施加)?(充能|弹药|装填弹药|拖拽|击退|伤害|治疗|护盾|再生|点燃|剧毒|霜冻|亢奋|衰弱)\s*(\d+)?)?[）)])?$/);
+    if (gate) {
+      const extraAction = normalizeSimpleAction(gate[4] || '');
+      return {
+        action: gate[1],
+        value: Math.max(1, Number(gate[2]) || 1),
+        gateMode: gate[3] || '',
+        extraAction,
+        extraValue: extraAction && simpleActionNeedsValue(extraAction) ? Math.max(1, Number(gate[5]) || 1) : 0
+      };
+    }
+    const match = part.match(/^(?:施加)?(充能|弹药|装填弹药|拖拽|击退|多重触发|伤害|治疗|护盾|再生|点燃|剧毒|霜冻|亢奋|衰弱)\s*(\d+)?$/);
+    if (!match) return null;
+    const action = normalizeSimpleAction(match[1]);
+    return {action, value: simpleActionNeedsValue(action) ? Math.max(1, Number(match[2]) || 1) : 0, gateMode: '', extraAction: '', extraValue: 0};
+  }
+
   function parseSimpleEffectText(text) {
     const rules = [];
-    const pattern = /【(战斗开始时|回合开始|回合结束|被攻击时|使用时)】(对目标和自身|对自身|对目标|对我方全体|对敌方全体)：([^。\n]+)/g;
+    const pattern = simpleRulePattern();
     let match;
     while ((match = pattern.exec(String(text || '')))) {
       match[3].split('、').map(part => part.trim()).filter(Boolean).forEach(part => {
-        const actionMatch = part.match(/^(?:施加)?(充能|弹药|拖拽|击退|爆能|倒计时|多重触发|伤害|治疗|护盾|再生|点燃|剧毒|霜冻|亢奋|衰弱)\s*(\d+)?$/);
-        if (!actionMatch) return;
-        const action = actionMatch[1];
-        rules.push({timing: match[1], scope: match[2], action, value: simpleActionNeedsValue(action) ? Math.max(1, Number(actionMatch[2]) || 1) : 0});
+        const parsed = parseSimpleAction(part);
+        if (parsed) rules.push({timing: match[1], scope: match[2], ...parsed});
       });
     }
     return rules;
   }
 
+  function simpleEffectActionText(action, value) {
+    const prefix = ['亢奋', '衰弱'].includes(action) ? '施加' : '';
+    return `${prefix}${action}${simpleActionNeedsValue(action) ? value : ''}`;
+  }
+
   function simpleActionText(rule) {
-    const prefix = ['亢奋', '衰弱'].includes(rule.action) ? '施加' : '';
-    return `${prefix}${rule.action}${simpleActionNeedsValue(rule.action) ? rule.value : ''}`;
+    const main = simpleEffectActionText(rule.action, rule.value);
+    if (!simpleGates.has(rule.action) || !rule.gateMode) return main;
+    if (rule.gateMode === '应用于此技能') return `${main}（应用于此技能）`;
+    const extra = rule.extraAction ? simpleEffectActionText(rule.extraAction, rule.extraValue) : '';
+    return `${main}（额外效果${extra ? `：${extra}` : ''}）`;
   }
 
   function groupedSimpleRules() {
@@ -354,10 +395,33 @@
     list.innerHTML = simpleDraft.map((rule, index) => `<div class="simple-effect-row"><b>${esc(rule.timing)}</b><i>${esc(rule.scope)}</i><span>${esc(simpleActionText(rule))}</span><button type="button" data-simple-remove="${index}" aria-label="删除${esc(simpleActionText(rule))}">删除</button></div>`).join('');
     const action = $('#simple-effect-action').value;
     $('#simple-effect-value').disabled = !simpleActionNeedsValue(action);
+    const item = selectedItem();
+    const pet = item && item.kind === '灵兽';
+    const gate = simpleGates.has(action);
+    $('#simple-gate-options').hidden = !gate;
+    const gateMode = $('#simple-gate-mode');
+    const applyOption = Array.from(gateMode.options).find(option => option.value === '应用于此技能');
+    if (applyOption) applyOption.disabled = pet;
+    if (pet && gateMode.value === '应用于此技能') gateMode.value = '额外效果';
+    $('#simple-extra-controls').hidden = !gate || gateMode.value !== '额外效果';
+    $('#simple-extra-value').disabled = !simpleActionNeedsValue($('#simple-extra-action').value);
+    Array.from($('#simple-effect-scope').options).forEach(option => {
+      option.disabled = pet && simpleSkillScopes.has(option.value) && option.value !== '灵兽自身技能' && option.value !== '己方所有技能';
+    });
+    if ($('#simple-effect-scope').selectedOptions[0] && $('#simple-effect-scope').selectedOptions[0].disabled) $('#simple-effect-scope').value = '对自身';
+    $$('input[name="simple-timing"]').forEach(input => {
+      input.disabled = pet && input.value === '使用时';
+      if (input.disabled) input.checked = false;
+    });
+    $('#simple-effect-help').textContent = pet
+      ? '灵宠简化效果只通过所选时机触发；可为自身技能或己方技能装填弹药。手写效果仍为最终依据。'
+      : '“应用于此技能”会门控基础能力和后续效果；写在爆能前的充能仍会先结算，写在爆能后的效果需爆能成功。';
   }
 
   function loadSimpleEffectBuilder(showMessage) {
-    simpleDraft = parseSimpleEffectText($('#item-form').elements['效果'].value);
+    const item = selectedItem();
+    const textarea = $('#item-form').elements[effectFieldFor(item)];
+    simpleDraft = parseSimpleEffectText(textarea.value);
     renderSimpleEffectBuilder();
     if (showMessage) showToast(simpleDraft.length ? `已读取 ${simpleDraft.length} 项简化效果` : '效果栏中没有可读取的简化规则');
   }
@@ -370,11 +434,17 @@
     }
     const scope = $('#simple-effect-scope').value;
     const action = $('#simple-effect-action').value;
+    if (!simpleScopes.includes(scope) || !simpleActions.includes(action)) return;
     const value = simpleActionNeedsValue(action) ? Math.max(1, Math.min(99, Number($('#simple-effect-value').value) || 1)) : 0;
+    const gateMode = simpleGates.has(action) ? $('#simple-gate-mode').value : '';
+    const extraAction = gateMode === '额外效果' ? $('#simple-extra-action').value : '';
+    if (extraAction && !simpleExtraActions.includes(extraAction)) return;
+    const extraValue = extraAction && simpleActionNeedsValue(extraAction) ? Math.max(1, Math.min(99, Number($('#simple-extra-value').value) || 1)) : 0;
     timings.forEach(timing => {
       const existing = simpleDraft.find(rule => rule.timing === timing && rule.scope === scope && rule.action === action);
-      if (existing) existing.value = value;
-      else simpleDraft.push({timing, scope, action, value});
+      const next = {timing, scope, action, value, gateMode, extraAction, extraValue};
+      if (existing) Object.assign(existing, next);
+      else simpleDraft.push(next);
     });
     renderSimpleEffectBuilder();
   }
@@ -385,13 +455,18 @@
       showToast('请先加入至少一项简化效果', 'error');
       return;
     }
-    if (groups.some(group => group.rules.every(rule => simpleModifiers.has(rule.action)))) {
+    if (groups.some(group => group.rules.every(rule => simpleModifiers.has(rule.action) && !rule.gateMode))) {
       showToast('每个触发时机和对象组合至少需要一项实际效果', 'error');
       return;
     }
-    const textarea = $('#item-form').elements['效果'];
+    if (groups.some(group => group.rules.some(rule => rule.gateMode === '额外效果' && !rule.extraAction))) {
+      showToast('“额外效果”需要选择一项额外泛用效果', 'error');
+      return;
+    }
+    const item = selectedItem();
+    const textarea = $('#item-form').elements[effectFieldFor(item)];
     const manual = textarea.value
-      .replace(/【(?:战斗开始时|回合开始|回合结束|被攻击时|使用时)】(?:对目标和自身|对自身|对目标|对我方全体|对敌方全体)：[^。\n]+。?/g, '')
+      .replace(simpleRulePattern(), '')
       .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
     const generated = groups.map(group => `【${group.timing}】${group.scope}：${group.rules.map(simpleActionText).join('、')}。`).join('\n');
     textarea.value = [manual, generated].filter(Boolean).join('\n');
@@ -460,8 +535,8 @@
     const item = selectedItem();
     const variant = currentVariant(item);
     const fields = variant.fields || item.fields || {};
-    const tags = splitTags(fields['词条']);
     const pet = item.kind === '灵兽';
+    const tags = [...(pet ? [] : [activationFor(item, fields)]), ...splitTags(fields['词条'])];
     const stats = pet
       ? [['生命值', fields.hp], ['攻击', fields['攻击']], ['防御', fields['防御']]]
       : [['能力', fields['能力']], ['防御', fields['防御']], ['射程 / 目标', fields['射程/目标']]];
@@ -509,13 +584,16 @@
       const fallback = binding.numeric ? '0' : '';
       form.elements[binding.input].value = value(fields[binding.field], fallback);
     });
+    if (!pet && !fields['主动/被动']) {
+      form.elements['skill-activation'].value = activationFor(item, fields);
+    }
     const nextBuilderKey = `${item.id}:${quality}`;
-    if (!pet && simpleBuilderKey !== nextBuilderKey) {
+    if (simpleBuilderKey !== nextBuilderKey) {
       simpleBuilderKey = nextBuilderKey;
-      simpleDraft = parseSimpleEffectText(fields['效果']);
+      simpleDraft = parseSimpleEffectText(fields[effectFieldFor(item)]);
       $$('input[name="simple-timing"]').forEach(input => { input.checked = false; });
     }
-    if (!pet) renderSimpleEffectBuilder();
+    renderSimpleEffectBuilder();
     if (pet) {
       rangeConfig = null;
       rangeStructured = false;
@@ -695,7 +773,7 @@
     const pet = itemKind === '灵兽';
     const headers = pet
       ? ['套路', '宠物名', '品质', '词条', 'hp', '攻击', '防御', '一句话效果', '主要配合对象', '升级理由', '套路定位', '原型', '来源工作表', '来源行']
-      : ['技能名', '品质', '能力', '防御', '射程/目标', '目标阵营', '目标方式', '目标条件', '攻击范围配置', '效果', '词条', '主要配合对象', '定位', '套路', '原型', '来源工作表', '来源行'];
+      : ['技能名', '品质', '主动/被动', '能力', '防御', '射程/目标', '目标阵营', '目标方式', '目标条件', '攻击范围配置', '效果', '词条', '主要配合对象', '定位', '套路', '原型', '来源工作表', '来源行'];
     const rows = [headers];
     items.filter(item => item.kind === itemKind).forEach(item => {
       const variants = item.variants && item.variants.length ? item.variants : [{tier: item.tier, fields: item.fields, source: item.source}];
@@ -705,7 +783,7 @@
         const attackRange = pet ? null : normalizeRangeConfig(fields);
         rows.push(pet
           ? [fields['套路'], variant.tier === item.tier ? item.name : '', variant.tier, fields['词条'], fields.hp, fields['攻击'], fields['防御'], fields['一句话效果'], fields['主要配合对象'], fields['升级理由'], fields['套路定位'], fields['原型'], source.sheet, source.row]
-          : [variant.tier === item.tier ? item.name : '', variant.tier, fields['能力'], fields['防御'], fields['射程/目标'], attackRange.targetSide, attackRange.targetMode, attackRange.condition, JSON.stringify(attackRange), fields['效果'], fields['词条'], fields['主要配合对象'], fields['定位'], fields['套路'], fields['原型'], source.sheet, source.row]);
+          : [variant.tier === item.tier ? item.name : '', variant.tier, fields['主动/被动'], fields['能力'], fields['防御'], fields['射程/目标'], attackRange.targetSide, attackRange.targetMode, attackRange.condition, JSON.stringify(attackRange), fields['效果'], fields['词条'], fields['主要配合对象'], fields['定位'], fields['套路'], fields['原型'], source.sheet, source.row]);
       });
     });
     const label = pet ? '灵宠' : '技能';
@@ -746,6 +824,7 @@
         properties: {
           name: {type: 'string', minLength: 1, description: '技能名称'},
           quality: {type: 'string', enum: qualities, description: '起始品质'},
+          activation: {type: 'string', enum: ['主动', '被动'], description: '技能使用方式'},
           ability: {type: 'string', description: '能力数值，例如攻击12+'},
           defense: {type: 'number', description: '防御数值'},
           range: {type: 'string', description: '射程或目标'},
@@ -768,6 +847,7 @@
         item.tier = targetQuality;
         item.variants.forEach(entry => { entry.fields['技能名'] = entry.tier === targetQuality ? item.name : null; });
         const variant = item.variants.find(entry => entry.tier === targetQuality);
+        variant.fields['主动/被动'] = input.activation === '被动' ? '被动' : '主动';
         variant.fields['能力'] = input.ability || '';
         variant.fields['防御'] = Number.isFinite(input.defense) ? input.defense : 0;
         variant.fields['射程/目标'] = input.range || '正前方第一个敌人';
@@ -883,6 +963,8 @@
   $('#range-fill').addEventListener('click', () => setRangeCells(true));
   $('#range-sync-previous').addEventListener('click', syncPreviousRange);
   $('#simple-effect-action').addEventListener('change', renderSimpleEffectBuilder);
+  $('#simple-gate-mode').addEventListener('change', renderSimpleEffectBuilder);
+  $('#simple-extra-action').addEventListener('change', renderSimpleEffectBuilder);
   $('#simple-effect-add').addEventListener('click', addSimpleEffect);
   $('#simple-effect-read').addEventListener('click', () => loadSimpleEffectBuilder(true));
   $('#simple-effect-clear').addEventListener('click', () => { simpleDraft = []; renderSimpleEffectBuilder(); });

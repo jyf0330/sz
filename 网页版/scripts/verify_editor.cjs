@@ -23,9 +23,12 @@ assert(html.includes('id="pet-fields"'));
 assert(html.includes('id="export-pet-csv"'));
 assert(html.includes('id="range-grid"'));
 assert(html.includes('id="range-sync-previous"'));
-for (const id of ['simple-effect-title', 'simple-effect-read', 'simple-effect-scope', 'simple-effect-action', 'simple-effect-value', 'simple-effect-add', 'simple-effect-list', 'simple-effect-clear', 'simple-effect-apply']) assert(html.includes(`id="${id}"`));
+for (const id of ['simple-effect-title', 'simple-effect-read', 'simple-effect-scope', 'simple-effect-action', 'simple-effect-value', 'simple-effect-add', 'simple-gate-options', 'simple-gate-mode', 'simple-extra-controls', 'simple-extra-action', 'simple-extra-value', 'simple-effect-list', 'simple-effect-clear', 'simple-effect-apply']) assert(html.includes(`id="${id}"`));
+assert(html.includes('name="skill-activation"'));
 for (const timing of ['战斗开始时', '回合开始', '回合结束', '被攻击时', '使用时']) assert(html.includes(`value="${timing}"`));
-for (const action of ['充能', '弹药', '拖拽', '击退', '爆能', '倒计时', '多重触发', '伤害', '治疗', '护盾', '再生', '点燃', '剧毒', '霜冻', '亢奋', '衰弱']) assert(html.includes(`<option>${action}</option>`));
+for (const action of ['充能', '装填弹药', '拖拽', '击退', '爆能', '倒计时', '多重触发', '伤害', '治疗', '护盾', '再生', '点燃', '剧毒', '霜冻', '亢奋', '衰弱']) assert(html.includes(`<option>${action}</option>`));
+for (const scope of ['左侧相邻技能', '右侧相邻技能', '灵兽自身技能', '己方所有技能']) assert(html.includes(`<option>${scope}</option>`));
+for (const mode of ['额外效果', '应用于此技能']) assert(html.includes(`<option>${mode}</option>`));
 assert(html.includes('name="range-target-side"'));
 for (const side of ['敌方', '友方', '自身', '自身与友方', '自身与敌方']) assert(html.includes(`<option>${side}</option>`));
 assert(html.includes('name="range-target-mode"'));
@@ -39,6 +42,11 @@ assert(battleJs.includes("runSimpleRules(skill, '使用时', targets)"));
 assert(battleJs.includes("runSimpleRulesForSide('回合开始', side)"));
 assert(battleJs.includes("runSimpleRulesForSide('回合结束', side)"));
 assert(battleJs.includes("runSimpleRules(skill, '被攻击时', [source])"));
+assert(battleJs.includes("runSimpleRules(target, '被攻击时', [source])"));
+assert(battleJs.includes("unitsOf(side, true).forEach(pet => runSimpleRules(pet, timing, []))"));
+assert(battleJs.includes("skill.activationMode ? skill.activationMode === '被动'"));
+assert(battleJs.includes('function simpleRuleSkillTargets'));
+assert(battleJs.includes('legacyChargeBeforeSimpleGate'));
 assert(battleJs.includes("targetsForEffectScope(passive, owner, inheritedTargets"));
 assert(battleJs.includes("targetsForEffectScope(retaliation, target, [source]"));
 assert(!battleJs.includes("'泰诺地龙自毒'"));
@@ -63,13 +71,55 @@ function extractFunction(source, name) {
 }
 
 const simpleRuleContext = {};
-vm.runInNewContext(`${extractFunction(battleJs, 'parseSimpleEffectRules')}\n${extractFunction(battleJs, 'stripSimpleEffectRules')}\nthis.rules = parseSimpleEffectRules('攻击5。\\n【回合开始】对自身：爆能6、充能3、施加亢奋2。\\n【被攻击时】对目标：击退、施加衰弱1。');\nthis.manual = stripSimpleEffectRules('攻击5。\\n【使用时】对目标：伤害8。');`, simpleRuleContext);
-assert.equal(simpleRuleContext.rules.length, 2);
-assert.equal(simpleRuleContext.rules[0].timing, '回合开始');
-assert.deepEqual(simpleRuleContext.rules[0].actions.map(action => action.type), ['爆能', '充能', '亢奋']);
-assert.equal(simpleRuleContext.rules[1].scope, '对目标');
+vm.runInNewContext(`${extractFunction(battleJs, 'parseSimpleEffectRules')}\n${extractFunction(battleJs, 'stripSimpleEffectRules')}\nthis.rules = parseSimpleEffectRules('攻击5。\\n【使用时】对自身：充能3、爆能6（应用于此技能）、施加亢奋2。\\n【回合开始】己方所有技能：倒计时2（额外效果：装填弹药1）。\\n【被攻击时】对目标：弹药2、击退。');\nthis.manual = stripSimpleEffectRules('攻击5。\\n【使用时】左侧相邻技能：装填弹药2。');`, simpleRuleContext);
+assert.equal(simpleRuleContext.rules.length, 3);
+assert.equal(simpleRuleContext.rules[0].timing, '使用时');
+assert.deepEqual(simpleRuleContext.rules[0].actions.map(action => action.type), ['充能', '爆能', '亢奋']);
+assert.equal(simpleRuleContext.rules[0].actions[1].gateMode, '应用于此技能');
+assert.equal(simpleRuleContext.rules[1].scope, '己方所有技能');
+assert.equal(simpleRuleContext.rules[1].actions[0].extraType, '装填弹药');
+assert.equal(simpleRuleContext.rules[2].actions[0].type, '装填弹药');
 assert(simpleRuleContext.manual.includes('攻击5'));
 assert(!simpleRuleContext.manual.includes('【使用时】'));
+
+const simpleRuntimeState = {gateReady: false, calls: []};
+const simpleRuntimeContext = {
+  consumeEnergy() { return simpleRuntimeState.gateReady; },
+  executeSimpleAction(source, owner, rule, action) { simpleRuntimeState.calls.push(action.type); return true; },
+  log() {},
+  esc: String
+};
+vm.createContext(simpleRuntimeContext);
+vm.runInContext(`${extractFunction(battleJs, 'resolveSimpleGate')}\n${extractFunction(battleJs, 'executeSimpleRule')}`, simpleRuntimeContext);
+const gateSource = {name: '门控技能', simpleRuleState: {}};
+const applicationRule = {id: 1, timing: '使用时', actions: [
+  {type: '充能', value: 2},
+  {type: '爆能', value: 5, gateMode: '应用于此技能'},
+  {type: '伤害', value: 9}
+]};
+let gateResult = simpleRuntimeContext.executeSimpleRule(gateSource, {}, applicationRule, []);
+assert.equal(gateResult.allowBase, false);
+assert.deepEqual(simpleRuntimeState.calls, ['充能']);
+simpleRuntimeState.gateReady = true;
+simpleRuntimeState.calls.length = 0;
+gateResult = simpleRuntimeContext.executeSimpleRule(gateSource, {}, applicationRule, []);
+assert.equal(gateResult.allowBase, true);
+assert.deepEqual(simpleRuntimeState.calls, ['充能', '伤害']);
+const extraRule = {id: 2, timing: '回合开始', actions: [
+  {type: '爆能', value: 3, gateMode: '额外效果', extraType: '装填弹药', extraValue: 2},
+  {type: '治疗', value: 1}
+]};
+simpleRuntimeState.gateReady = false;
+simpleRuntimeState.calls.length = 0;
+assert.equal(simpleRuntimeContext.executeSimpleRule(gateSource, {}, extraRule, []).allowBase, true);
+assert.deepEqual(simpleRuntimeState.calls, ['治疗']);
+simpleRuntimeState.gateReady = true;
+simpleRuntimeState.calls.length = 0;
+simpleRuntimeContext.executeSimpleRule(gateSource, {}, extraRule, []);
+assert.deepEqual(simpleRuntimeState.calls, ['装填弹药', '治疗']);
+const countdownRule = {id: 3, timing: '使用时', actions: [{type: '倒计时', value: 2, gateMode: '应用于此技能'}]};
+assert.equal(simpleRuntimeContext.executeSimpleRule(gateSource, {}, countdownRule, []).allowBase, false);
+assert.equal(simpleRuntimeContext.executeSimpleRule(gateSource, {}, countdownRule, []).allowBase, true);
 
 const storage = new Map();
 const localStorage = {
@@ -98,6 +148,7 @@ assert.equal(window.ATLAS_EDITOR.getItems().find(item => item.id === edited.id).
 assert(window.ATLAS_EDITOR.getItems().find(item => item.id === edited.id).variants.every(variant => variant.fields['词条'] === '统一标签，验证'));
 
 const custom = window.ATLAS_EDITOR.createSkill();
+assert.equal(custom.fields['主动/被动'], '主动');
 assert.deepEqual(custom.fields['攻击范围配置'].caster, [4, 4]);
 assert.equal(custom.fields['攻击范围配置'].size, 9);
 assert.equal(custom.fields['攻击范围配置'].targetSide, '敌方');
