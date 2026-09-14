@@ -14,18 +14,18 @@
       <span>灵宠战斗模拟器<small>TACTICAL RESOLUTION LAB</small></span>
     </a>
     <div class="battle-state"><span class="status-dot"></span><span id="battle-state-text">准备就绪</span><span class="divider"></span><span>第 <b id="round-number">1</b> 回合</span><span class="divider"></span><span id="turn-side-label">己方回合</span><span class="divider"></span><span>行动 <b id="action-number">0</b></span></div>
-    <div class="top-actions"><a class="ghost-btn" href="editor.html">图鉴编辑</a><button id="config-btn" class="ghost-btn">战斗配置</button><button id="reset-btn" class="ghost-btn">重置</button><button id="run-btn" class="primary-btn">开始战斗</button></div>
+    <div class="top-actions"><a class="ghost-btn" href="editor.html">图鉴编辑</a><button id="guide-btn" class="ghost-btn guide-btn">玩法说明</button><button id="config-btn" class="ghost-btn">战斗配置</button><button id="reset-btn" class="ghost-btn">重置</button><button id="run-btn" class="primary-btn">开始战斗</button></div>
   </header>
 
   <main class="battle-layout">
     <aside class="side-panel detail-panel">
       <div class="panel-title"><div><span class="kicker">INSPECTOR</span><h2>当前详情</h2></div><span class="live-chip">LIVE</span></div>
       <div id="detail-content" class="detail-content"></div>
-      <div class="hint-box"><span>操作提示</span><p>点击灵宠查看属性；点击技能查看效果。选中灵宠后点击棋盘空格即可移动。</p></div>
+      <div class="hint-box"><span>操作提示</span><p>点击灵宠查看属性；点击技能查看效果。选中灵宠后点击棋盘空格即可移动；待复活时请在开始移动阶段点击空格选择位置。</p></div>
     </aside>
 
     <section class="arena-panel">
-      <div class="arena-head"><div><span class="kicker">BATTLEFIELD / 06 × 05</span><h1>逐步结算战场</h1></div><div class="arena-tools"><button id="step-btn" class="tool-btn">结算一步 <span>→</span></button><button id="auto-btn" class="tool-btn">自动播放</button></div></div>
+      <div class="arena-head"><div><span class="kicker">BATTLEFIELD / 04 × 05</span><h1>逐步结算战场</h1></div><div class="arena-tools"><button id="step-btn" class="tool-btn">结算一步 <span>→</span></button><button id="auto-btn" class="tool-btn">自动播放</button></div></div>
       <div class="legend"><span><i class="legend-dot ally"></i>己方</span><span><i class="legend-dot enemy"></i>敌方</span><span><i class="legend-square selected"></i>当前目标</span><span><i class="legend-square range"></i>攻击范围</span><span class="legend-note">回合开始 → 操作 → 技能结算 → 回合结束</span></div>
       <div id="turn-flow" class="turn-flow" aria-label="回合流程"></div>
       <div id="team-context" class="team-context"></div>
@@ -67,8 +67,33 @@
       <div id="config-info-content" class="skill-info-content"></div>
     </section>
   </div>
+  <div id="guide-modal" class="skill-info-modal" hidden>
+    <section class="skill-info-dialog guide-dialog" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+      <div class="skill-info-head"><div><span class="kicker">RULEBOOK / SANDBOX</span><h2 id="guide-title">玩法说明</h2></div><button id="close-guide" class="icon-btn" title="关闭玩法说明">×</button></div>
+      <div class="guide-content">
+        <section class="quick-start">
+          <span class="guide-section-label">战斗流程</span>
+          <ol>
+            <li><b>战斗开始效果</b><span>先统一结算所有技能文案中的“战斗开始时”效果，不受技能栏位置影响。</span></li>
+            <li><b>回合开始</b><span>依次处理复活、防御重置、倒计时与被动、能量、状态伤害和增益。</span></li>
+            <li><b>部署与结算</b><span>己方在开始战斗前移动和调整技能顺序；点击开始后按技能栏从左到右结算。</span></li>
+            <li><b>敌方行动</b><span>敌方由确定性 AI 自动移动和选技，行动、目标和触发顺序都会写入日志。</span></li>
+          </ol>
+        </section>
+        <div class="guide-heading"><div><span class="kicker">CORE RULES</span><h3>核心规则</h3></div><p>用于理解棋盘上的即时反馈和结算日志</p></div>
+        <div class="glossary-grid">
+          <article class="glossary-card"><span>POSITION</span><h4>移动、位移与霜冻</h4><p>棋盘为纵向5行、横向4列。移动阶段可调整己方位置；技能造成的拖拽、击退等位置变化会立即记录。带有霜冻的灵宠位置实际发生变化时触发霜冻伤害。</p></article>
+          <article class="glossary-card"><span>RESOURCE</span><h4>能量与爆能</h4><p>灵宠能量没有上限。技能栏显示当前能量/爆能消耗；能量足够才会爆能，不足时按技能篇幅获得补偿能量。</p></article>
+          <article class="glossary-card"><span>VALUE</span><h4>技能数值</h4><p>技能栏显示当前实际数值，详情会拆分技能基础值、灵宠攻击力和战斗中获得的提升。带“+”的点燃、淬毒、覆雪按技能篇幅计入攻击力比例。</p></article>
+          <article class="glossary-card"><span>STATUS</span><h4>伤害与状态</h4><p>直接伤害、灼烧、剧毒、覆雪都属于进攻；剧毒在回合结束结算并减少层数。灼烧和霜冻会被护盾减免，剧毒伤害无视护盾；所有伤害都会使防御减少1。</p></article>
+          <article class="glossary-card"><span>DEFEAT</span><h4>阵亡与复活</h4><p>灵宠阵亡会扣除己方英雄对应的最大生命值，通常两回合后复活。复活位置由该方操控者在回合开始的移动阶段选择；敌方由 AI 选择。</p></article>
+          <article class="glossary-card"><span>LOG</span><h4>日志与详情</h4><p>点击灵宠或技能查看实时详情，技能卡可拖拽排序。日志按真实结算顺序追加，并用颜色区分伤害、灼烧、剧毒、护盾、治疗和霜冻。</p></article>
+        </div>
+      </div>
+    </section>
+  </div>
   <script src="graph-data.js"></script>
   <script src="data-store.js"></script>
-  <script src="battle-v2.js?v=20260912a"></script>
+  <script src="battle-v2.js?v=20260912b"></script>
 </body>
 </html>

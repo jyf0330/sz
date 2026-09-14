@@ -16,7 +16,7 @@ const path = require('node:path');
     await page.locator('[data-battle-link]').click();
     assert.ok(page.url().endsWith('/battle.html'));
     await page.waitForFunction(() => window.ATLAS_DATA && document.querySelectorAll('#board .cell-coordinate').length === 20);
-    assert.equal(await page.evaluate(() => window.ATLAS_DATA.items.length), 100);
+    assert.equal(await page.evaluate(() => window.ATLAS_DATA.items.length), 108);
     assert.equal(await page.locator('#board .cell-coordinate').count(), 20);
     assert.match(await page.locator('#team-context').innerText(), /己方/);
     await page.locator('#skill-bar .skill-card').first().click();
@@ -71,7 +71,7 @@ const path = require('node:path');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     assert.deepEqual(errors, []);
     assert.deepEqual(externalRequests, []);
-    const result = {status: 'PASS', checks: ['图谱跳转战斗页', '100 个物品共用数据及全部技能可选', '75 个正式技能均保留物品名', '日志包含回合、结算步、事件与实际物品名', '技能卡和灵宠点击详情', '20 格棋盘（横4×纵5）', '普通移动日志改为结算前坐标汇总', '40 次正式按钮结算并跨回合', '重置', '手机配置及无横向溢出'], pageErrors: errors, externalRequests, scope: '合并兼容性冒烟；不代表全部战斗规则验收'};
+    const result = {status: 'PASS', checks: ['图谱跳转战斗页', '108 个物品（含编辑器新增/覆盖）共用数据及全部技能可选', '正式技能均保留物品名', '日志包含回合、结算步、事件与实际物品名', '技能卡和灵宠点击详情', '20 格棋盘（横4×纵5）', '普通移动日志改为结算前坐标汇总', '40 次正式按钮结算并跨回合', '重置', '手机配置及无横向溢出'], pageErrors: errors, externalRequests, scope: '合并兼容性冒烟；不代表全部战斗规则验收'};
     fs.writeFileSync(path.join(root, 'verification/battle-results.json'), JSON.stringify(result, null, 2));
     console.log(result);
   } finally { await browser.close(); }

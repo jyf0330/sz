@@ -50,7 +50,7 @@
     "id": "fire-energy-team",
     "name": "队伍3-火热能量",
     "shortName": "火热能量",
-    "description": "赤精鱼与烁德童子负责火焰链，玄铁龟提供能量运转，白蔷薇用黄金连抓补充联动。",
+    "description": "赤精鱼与烁德童子负责火焰链，玄铁龟提供能量运转，白蔷薇用黄金乱抓补充联动。",
     "heroHp": 660,
     "pets": [
       {"name": "赤精鱼", "quality": "白银"},
@@ -60,14 +60,14 @@
     ],
     "skills": [
       {"name": "火中取栗", "quality": "白银", "owner": 0},
-      {"name": "引火", "quality": "白银", "owner": 0},
-      {"name": "激昂", "quality": "白银", "owner": 0},
-      {"name": "飞抓钩", "sourceName": "飞爪钩", "quality": "白银", "owner": 0},
+      {"name": "灵火", "quality": "白银", "owner": 0},
+      {"name": "预充能", "quality": "白银", "owner": 0},
+      {"name": "补气丹", "quality": "白银", "owner": 0},
       {"name": "妒火", "quality": "白银", "owner": 1},
       {"name": "天火咒", "quality": "白银", "owner": 1},
-      {"name": "连抓", "quality": "黄金", "owner": 2},
-      {"name": "蓄能", "sourceName": "蓄力", "quality": "白银", "owner": 3},
-      {"name": "轻击", "quality": "白银", "owner": 3}
+      {"name": "乱抓", "quality": "黄金", "owner": 2},
+      {"name": "轻击", "quality": "白银", "owner": 3},
+      {"name": "气甲", "quality": "白银", "owner": 3}
     ],
     "source": {"document": "配队范例.docx", "section": "队伍3-火热能量"}
   }

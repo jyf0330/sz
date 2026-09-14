@@ -191,7 +191,7 @@
 
   const defaultConfig = {
     player: {
-      level: 1, income: 20, history: 0, heroHp: 360,
+      level: 1, income: 20, history: 0, darkArtifactPurchases: 0, heroHp: 360,
       pets: [
         {name:'烁德童子', quality:'青铜'},
         {name:'花椒蟹', quality:'白银'},
@@ -230,6 +230,7 @@
       level: 1,
       income: 20,
       history: 0,
+      darkArtifactPurchases: 0,
       heroHp: Number(preset.heroHp) || 660,
       pets: clone(preset.pets).slice(0, 4),
       skills: clone(preset.skills).map(skill => ({name:skill.name, quality:skill.quality, owner:Number(skill.owner)}))
@@ -275,7 +276,7 @@
   function createHero(config, side) {
     const level = Math.max(1, Number(config.level) || 1);
     const maxHp = Math.max(1, Number(config.heroHp) || 100 + (level - 1) * 10);
-    return {side, level, gold: Math.max(0, Number(config.income) || 0), history: Math.max(0, Number(config.history) || 0), hp: maxHp, maxHp, skillDamage: 0, skillDamageGrowth: 0, points: 0};
+    return {side, level, gold: Math.max(0, Number(config.income) || 0), history: Math.max(0, Number(config.history) || 0), experience: 0, hp: maxHp, maxHp, skillDamage: 0, skillDamageGrowth: 0, points: 0};
   }
 
   function createPet(item, side, index) {
@@ -333,6 +334,7 @@
       permanentDef: 0,
       skillUses: 0,
       firstMartialReady: true,
+      firstSkillReady: true,
       passiveCountdown: abilityCountdownMax,
       abilityCountdown: abilityCountdownMax,
       reviveAt: null,
@@ -416,6 +418,7 @@
       healBonus: 0,
       regenBonus: 0,
       critBonus: 0,
+      breakShellBonus: 0,
       used: 0,
       lastTarget: null
     };
@@ -430,6 +433,10 @@
     state.enemy = createHero(config.enemy, 'enemy');
     state.player.pets = config.player.pets.filter(item => item.name).map((item, i) => createPet(item, 'player', i));
     state.enemy.pets = config.enemy.pets.filter(item => item.name).map((item, i) => createPet(item, 'enemy', i));
+    const purchasedDarkArtifacts = Math.max(0, Number(config.player.darkArtifactPurchases) || 0);
+    state.player.pets.forEach(pet => {
+      if (pet.name === '吞金鼠' && purchasedDarkArtifacts) pet.value += purchasedDarkArtifacts * pet.valueGrowth;
+    });
     state.playerSkills = config.player.skills.filter(item => item.name).map((item, i) => createSkill(item, 'player', i, state.player.pets));
     state.enemySkills = config.enemy.skills.filter(item => item.name).map((item, i) => createSkill(item, 'enemy', i, state.enemy.pets));
     placeInitialUnits(state.player.pets, 'player');
@@ -566,9 +573,9 @@
     const p = state.player;
     const e = state.enemy;
     $('#team-context').innerHTML =
-      '<div class="team-context-card ally-context"><span>己方英雄</span><strong>' + p.hp + ' / ' + p.maxHp + '</strong><small>等级 ' + p.level + ' · 金币 ' + p.gold + ' · 胜场 ' + p.history + '</small></div>' +
+      '<div class="team-context-card ally-context"><span>己方英雄</span><strong>' + p.hp + ' / ' + p.maxHp + '</strong><small>等级 ' + p.level + ' · 金币 ' + p.gold + ' · 胜场 ' + p.history + ' · 经验 ' + p.experience + '</small></div>' +
       '<div class="phase-context"><b>' + esc(phaseText()) + '</b><small>' + (pendingReviveFor('player') ? '请点击棋盘空格选择复活位置' : state.phase === 'position' ? '可移动己方灵宠并调整技能顺序' : state.phase === 'finished' ? '可重置或重新配置战斗' : '所有效果按日志顺序记录') + '</small></div>' +
-      '<div class="team-context-card enemy-context"><span>敌方英雄</span><strong>' + e.hp + ' / ' + e.maxHp + '</strong><small>等级 ' + e.level + ' · 金币 ' + e.gold + ' · 胜场 ' + e.history + '</small></div>';
+      '<div class="team-context-card enemy-context"><span>敌方英雄</span><strong>' + e.hp + ' / ' + e.maxHp + '</strong><small>等级 ' + e.level + ' · 金币 ' + e.gold + ' · 胜场 ' + e.history + ' · 经验 ' + e.experience + '</small></div>';
   }
 
   function cellAt(row, col) {
@@ -721,7 +728,7 @@
     if (text.includes('第一二格及其左右相邻格')) return forward >= 1 && forward <= 2 && lateral <= 1;
     if (text.includes('第一格及其左右两格')) return forward === 1 && lateral <= 1;
     if (text.includes('第二格及其左右两格')) return forward === 2 && lateral <= 1;
-    if (text.includes('第二格或第三格') || text.includes('第二格和第三格')) return (forward === 2 || forward === 3) && lateral === 0;
+    if (text.includes('第二格或第三格') || text.includes('第二格和第三格') || text.includes('第二和第三格')) return (forward === 2 || forward === 3) && lateral === 0;
     if (text.includes('直线')) return lateral === 0 && forward > 0 && (!text.includes('范围') || forward <= 5);
     if (text.includes('三格中最远')) return lateral === 0 && forward >= 1 && forward <= 3;
     if (text.includes('第三格')) return forward === 3 && lateral === 0;
@@ -812,6 +819,7 @@
       add('灵宠战斗持续伤害提升', skill && !skill.preview && owner && owner.permanentSkillDamage);
       add('灵宠技能伤害提升', skill && !skill.preview && owner && owner.skillDamage);
       add('技能自身伤害提升', skill && !skill.preview && skill.damageBonus);
+      add('破壳消耗护盾附加伤害', skill && !skill.preview && skill.breakShellBonus);
     }
     if (kind === 'burn') {
       add('本回合点燃提升', skill && !skill.preview && owner && owner.roundIgnite);
@@ -840,8 +848,13 @@
       } else attack = Math.max(0, Math.round(owner.atk));
     }
     const bonuses = valueBonusParts(skill, owner, entry.kind);
-    const value = Math.max((entry.kind === 'burn' || entry.kind === 'poison' || entry.kind === 'frost') ? 1 : 0, base + attack + bonuses.reduce((sum, part) => sum + part.value, 0));
-    return {kind: entry.kind, label: entry.label, base, attack, bonuses, value, plus: entry.plus};
+    let value = Math.max((entry.kind === 'burn' || entry.kind === 'poison' || entry.kind === 'frost') ? 1 : 0, base + attack + bonuses.reduce((sum, part) => sum + part.value, 0));
+    let multiplier = 1;
+    if (entry.kind === 'poison' && owner && owner.name === '蕈章' && owner.shield > 0) {
+      multiplier = 2;
+      value *= multiplier;
+    }
+    return {kind: entry.kind, label: entry.label, base, attack, bonuses, value, plus: entry.plus, multiplier};
   }
 
   function skillValueBreakdowns(skill, owner) {
@@ -861,6 +874,7 @@
     const parts = ['技能基础 ' + item.base];
     if (item.attack) parts.push('灵宠攻击 ' + item.attack + (item.kind === 'burn' || item.kind === 'poison' || item.kind === 'frost' ? '（按篇幅比例）' : ''));
     item.bonuses.forEach(part => parts.push(part.label + ' ' + (part.value > 0 ? '+' : '') + part.value));
+    if (item.multiplier && item.multiplier !== 1) parts.push('蕈章护盾淬毒翻倍 ×' + item.multiplier);
     return parts.join(' + ') + ' = ' + item.value;
   }
 
@@ -1025,6 +1039,7 @@
     const abilityTags = [];
     if (unit.abilityEnergyCost) abilityTags.push('能力爆能（' + unit.energy + ' / ' + unit.abilityEnergyCost + '）');
     if (unit.abilityCountdownMax) abilityTags.push('能力倒计时（' + (unit.abilityCountdown == null ? unit.abilityCountdownMax : unit.abilityCountdown) + ' / ' + unit.abilityCountdownMax + '）');
+    if (unit.name === '吞金鼠') abilityTags.push('当前物品价值 ' + unit.value);
     const abilityHtml = '<div class="detail-label">灵宠能力</div><p class="focus-effect">' + esc(unit.effect || '暂无简述') + '</p>' + (abilityTags.length ? '<div class="tag-row">' + abilityTags.map(tag => '<span class="tag explosion-tag">' + esc(tag) + '</span>').join('') + '</div>' : '');
     const equippedHtml = equipped.length
       ? equipped.map(item => '<button type="button" class="detail-skill-link" data-skill-info="' + esc(item.id) + '"><span>' + esc(item.name) + '<small>' + esc(valueSummary(item, unit)) + '</small></span><small>' + esc(explosionLabel(item) || '查看技能详情') + '</small></button>').join('')
@@ -1721,6 +1736,7 @@
       unit.roundSkillDamage = 0;
       unit.roundIgnite = 0;
       unit.firstMartialReady = true;
+      unit.firstSkillReady = true;
       unit.rooted = 0;
       unit.silence = 0;
     });
@@ -1768,7 +1784,8 @@
         unit.passiveCountdown = unit.abilityCountdown;
         log('铁丸子倒计时 -1，当前为 ' + unit.abilityCountdown + '。', 'trigger', 'COUNTDOWN');
       } else {
-        const reload = skillList(side).find(skill => skill.ammoMax && skill.ammo < skill.ammoMax);
+        const reloadCandidates = skillList(side).filter(skill => skill.owner === unit.id && skill.ammoMax && skill.ammo < skill.ammoMax);
+        const reload = pseudoRandomTargets(reloadCandidates, {id:'iron-ball-' + unit.id + '-' + state.round}, 1)[0];
         if (reload) {
           const amount = valueFromEffect(unit.legacyEffect || unit.effect, [/装填(\d+)枚弹药/], 2);
           reload.ammo = Math.min(reload.ammoMax, reload.ammo + amount);
@@ -1789,14 +1806,21 @@
       });
       log('通灵钟在场：己方倒计时需求减少1回合（本次影响 ' + changed + ' 个技能）。', 'trigger', 'PET PASSIVE');
     }
+    const witness = units.filter(unit => unit.name === '见闻兽');
+    witness.forEach(unit => {
+      const chance = valueFromEffect(unit.effect, [/暴击率\+(\d+)%/], 10);
+      log('<strong>见闻兽</strong> 在场：己方所有灵兽暴击率 +' + chance + '%。', 'trigger', 'PET PASSIVE');
+    });
   }
 
   function startEnergy(side) {
     const units = unitsOf(side, true);
     units.filter(unit => unit.name === '烁德童子').forEach(unit => {
-      addEnergy(unit, 1, '回合开始被动充能');
+      const amount = valueFromEffect(unit.effect, [/自身获得(\d+)点能量/], 1);
+      addEnergy(unit, amount, '回合开始被动充能');
       const adjacent = units.filter(other => other.id !== unit.id && Math.abs(other.pos[0] - unit.pos[0]) + Math.abs(other.pos[1] - unit.pos[1]) <= 1);
-      if (adjacent[0]) addEnergy(adjacent[0], 1, '烁德童子相邻充能');
+      const target = pseudoRandomTargets(adjacent, {id:'pet-energy-' + unit.id}, 1)[0];
+      if (target) addEnergy(target, amount, '烁德童子相邻充能');
     });
     units.filter(unit => unit.name === '赤精鱼').forEach(unit => {
       const cost = valueFromEffect(unit.legacyEffect || unit.effect, [/消耗(\d+)点能量/], 5);
@@ -1828,8 +1852,8 @@
     const units = unitsOf(side, true);
     units.filter(unit => unit.name === '吞金鼠').forEach(unit => {
       const lowest = units.slice().sort((a, b) => a.hp - b.hp || a.id.localeCompare(b.id))[0];
-      const multiplier = valueFromEffect(unit.effect, [/价值\*(\d+)/], QUALITY_MULT[unit.quality] || 1);
-      if (lowest) healUnit(unit, lowest, 3 * multiplier, '吞金鼠回合开始治疗');
+      const multiplier = valueFromEffect(unit.legacyEffect || unit.effect, [/价值\*(\d+)/], QUALITY_MULT[unit.quality] || 1);
+      if (lowest) healUnit(unit, lowest, unit.value * multiplier, '吞金鼠回合开始治疗（物品价值 ' + unit.value + ' × ' + multiplier + '）');
     });
   }
 
@@ -1888,8 +1912,8 @@
       log('<strong>' + esc(target.name) + '</strong> 治疗量 ' + logValue('heal', value) + '，但已满生命，治疗没有溢出。', 'trigger', 'HEAL');
     }
     if (target.name === '沼泽鼠' && actual > 0) {
-      const enemy = unitsOf(opponentSide(target.side), true).sort((a, b) => a.hp - b.hp)[0];
-      const poison = valueFromEffect(target.effect, [/施加\s*(\d+)点剧毒/, /施加(\d+)点剧毒/], 6);
+      const enemy = pseudoRandomTargets(unitsOf(opponentSide(target.side), true), {id:'marsh-' + target.id + '-' + state.action}, 1)[0];
+      const poison = valueFromEffect(target.legacyEffect || target.effect, [/施加\s*(\d+)点剧毒/, /施加(\d+)点剧毒/], 6);
       if (enemy) applyPoison(target, enemy, poison, '沼泽鼠自身受到治疗后的被动');
     }
     return actual;
@@ -1913,7 +1937,6 @@
     if (!target || target.dead) return;
     let value = Math.max(1, Math.round(amount || 0));
     const old = target.poison;
-    if (target.name === '蕈章' && target.shield > 0) value *= 2;
     target.poison += value;
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得剧毒 +' + logValue('poison', value) + '，当前 ' + logValue('poison', target.poison) + '。', 'trigger', 'POISON');
     trace(target.name + ' 剧毒 +' + value, 'trigger');
@@ -1947,7 +1970,7 @@
     if (old > 0) {
       const defenseBefore = Math.max(0, target.def);
       const shieldBefore = Math.max(0, target.shield);
-      const defenseLoss = Math.floor(value / 2);
+      const defenseLoss = Math.ceil(value / 2);
       const shieldLoss = value * 3;
       target.def = Math.max(0, target.def - defenseLoss);
       target.shield = Math.max(0, target.shield - shieldLoss);
@@ -1969,8 +1992,9 @@
     }
     const crab = source && source.name === '花椒蟹' && !source.dead ? source : null;
     if (crab && attackHit && target.hp > 0) {
-      damageUnit(crab, target, 1, {status:'被动', ignoreDefense:false, meta:'FLOWER CRAB'});
-      log('花椒蟹被动：技能赋予灼烧后，对同一目标造成1点额外伤害；该被动伤害不算白蔷薇的攻击触发。', 'trigger', 'PET PROC');
+      const extra = valueFromEffect(crab.effect, [/造成(\d+)点伤害/], 1);
+      damageUnit(crab, target, extra, {status:'被动', ignoreDefense:false, meta:'FLOWER CRAB'});
+      log('花椒蟹被动：技能赋予灼烧后，对同一目标造成' + extra + '点额外伤害；该被动伤害不算白蔷薇的攻击触发。', 'trigger', 'PET PROC');
     }
     if (source && source.side && source.hp > 0) {
       skillList(source.side).filter(skill => skill.owner === source.id && skill.name === '火中取栗').forEach(skill => reduceCountdown(skill, 1, '装备灵宠触发点燃后'));
@@ -2003,12 +2027,12 @@
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得护盾 ' + logValue('shield', '+' + value) + '。', 'trigger', 'SHIELD');
     trace(target.name + ' 护盾 +' + value, 'trigger');
     if (target.name === '鲛人抢手' && value > 0) {
-      const skill = skillList(target.side).find(item => item.owner === target.id && !isPassiveSkill(item));
-      const growth = valueFromEffect(target.effect, [/技能伤害提升(\d+)点/], 10);
+      const skill = pseudoRandomTargets(skillList(target.side).filter(item => item.owner === target.id && !isPassiveSkill(item)), {id:'shark-gunner-' + target.id + '-' + state.action}, 1)[0];
+      const growth = valueFromEffect(target.legacyEffect || target.effect, [/技能伤害提升(\d+)点/], 10);
       if (skill) addSkillGrowth(skill, 'damageBonus', growth, '鲛人抢手获得护盾后的技能成长');
     }
     if (target.name === '巨伞蕈' && value > 0) {
-      const allies = unitsOf(target.side, true).filter(unit => unit.id !== target.id).slice(0, 2);
+      const allies = pseudoRandomTargets(unitsOf(target.side, true).filter(unit => unit.id !== target.id), {id:'umbrella-' + target.id + '-' + state.action}, 2);
       allies.forEach(ally => applyShield(target, ally, value, '巨伞蕈护盾联动'));
       if (allies.length) log('巨伞蕈护盾联动：为 ' + allies.map(ally => esc(ally.name)).join('、') + ' 各提供等量护盾。', 'trigger', 'PET PROC');
     }
@@ -2060,10 +2084,13 @@
   function criticalChance(skill, owner) {
     const abilityChance = valueFromEffect(skill && (skill.ability + ' ' + skill.effect), [/暴击率\s*(\d+)%/], 0);
     const petChance = owner && owner.critBonus ? owner.critBonus : 0;
+    const witnessChance = owner ? unitsOf(owner.side, true)
+      .filter(unit => unit.name === '见闻兽')
+      .reduce((sum, unit) => sum + valueFromEffect(unit.effect, [/暴击率\+(\d+)%/], 10), 0) : 0;
     const list = owner ? skillList(owner.side) : [];
     const index = list.indexOf(skill);
     const focusBonus = index >= 0 && list.some((item, itemIndex) => item.name === '专注' && Math.abs(itemIndex - index) === 1) ? 10 : 0;
-    return Math.min(100, abilityChance + petChance + focusBonus + (skill && skill.critBonus || 0));
+    return Math.min(100, abilityChance + petChance + witnessChance + focusBonus + (skill && skill.critBonus || 0));
   }
 
   function triggerCritical(owner, skill, targets) {
@@ -2102,6 +2129,11 @@
         const amount = valueFromEffect(item.effect, [/护盾值上升(\d+)/], 5);
         addSkillGrowth(item, 'shieldBonus', amount, '其它武技使用后护盾成长');
       });
+      if (owner.name === '泥沼妖') {
+        const amount = valueFromEffect(owner.effect, [/提供(\d+)点护盾/], 5);
+        const target = pseudoRandomTargets(unitsOf(side, true), {id:'mud-' + owner.id + '-' + skill.id}, 1)[0];
+        if (target) applyShield(owner, target, amount, '泥沼妖使用武技后');
+      }
     }
     skillList(side).filter(item => item.name === '凌厉').forEach(item => {
       addSkillGrowth(item, 'critBonus', 10, '友方行动后的暴击率成长');
@@ -2111,17 +2143,29 @@
     }
   }
 
+  function triggerSharkCopy(owner, skill, side, options) {
+    if (!owner || !skill || (options && options.sharkCopy)) return;
+    const bar = skillList(side);
+    const copied = state.round % 2 === 1 ? bar[0] : bar[bar.length - 1];
+    if (!copied || copied.id !== skill.id || owner.name === '乌角鲨') return;
+    unitsOf(side, true).filter(unit => unit.name === '乌角鲨').forEach(shark => {
+      log('<strong>乌角鲨</strong> 触发：' + sideLabel(side) + '本回合' + (state.round % 2 === 1 ? '最前' : '最后') + '技能已由原灵宠使用完毕，乌角鲨立即再使用 <strong>' + esc(skill.name) + '</strong>。', 'trigger', 'PET PROC');
+      useSkill(skill, side, {ownerOverride: shark, sharkCopy: true});
+    });
+  }
+
   function genericAttackValue(skill, owner, kind) {
     return primaryValueBreakdown(skill, owner, kind || 'damage').value;
   }
 
   function useSkill(skill, side, options) {
     const immediateUse = !!(options && options.immediateUse);
+    const ownerOverride = options && options.ownerOverride;
     state.action += 1;
     state.trace = [];
     state.selectedSkill = skill;
-    state.selectedId = skill.owner;
-    const owner = ownerOf(skill);
+    const owner = ownerOverride || ownerOf(skill);
+    state.selectedId = owner ? owner.id : skill.owner;
     const label = sideLabel(side) + '技能 ' + skill.name;
     setBanner(skill.name, (owner ? owner.name : '未分配') + ' · Step ' + state.action);
     if (!owner || owner.dead || owner.hp <= 0) {
@@ -2154,6 +2198,27 @@
     }
     let countdownAdvanced = false;
     if (!targets.length && (skill.rangeConfig || !skillIsSupport(skill)) && skill.name !== '轻击') {
+      const missCharge = parseFirst(skill.legacyEffect, [/充能\s*(\d+)/], 0);
+      const triggersOnMiss = /未命中也会触发/.test(skill.legacyEffect || '');
+      if (triggersOnMiss && missCharge) {
+        if (skill.ammoMax && skill.ammo <= 0) {
+          log('<strong>' + esc(skill.name) + '</strong> 弹药为0，无法使用。', 'warn', 'AMMO');
+          renderAll();
+          return;
+        }
+        if (skill.ammoMax) {
+          skill.ammo -= 1;
+          log('<strong>' + esc(skill.name) + '</strong> 无目标，仍按技能原文触发充能；消耗1枚弹药，剩余 ' + skill.ammo + '。', 'trigger', 'AMMO');
+        } else {
+          log('<strong>' + esc(skill.name) + '</strong> 无目标，但按技能原文“未命中也会触发”。', 'trigger', 'TARGET');
+        }
+        addEnergy(owner, missCharge, skill.name + '未命中充能');
+        skill.used += 1;
+        owner.skillUses += 1;
+        trace(skill.name + ' 未命中仍充能' + missCharge, 'trigger');
+        renderAll();
+        return;
+      }
       if (skill.baseCountdown && skill.countdown > 0 && !immediateUse) {
         advanceCountdown(skill);
         countdownAdvanced = true;
@@ -2299,7 +2364,9 @@
     const frostSkill = /覆雪|结霜/.test(skill.name + ' ' + skill.ability) && regularEffectReady;
     const frostValue = valueEntriesOf(skill).find(entry => entry.kind === 'frost');
     const directDamage = valueEntriesOf(skill).some(entry => entry.kind === 'damage') || /造成伤害/.test(skill.legacyEffect);
-    const critical = attackSkill && regularEffectReady ? triggerCritical(owner, skill, targets) : false;
+    const directDamageForUse = directDamage && shellAttackReady;
+    const attackEffectReady = attackSkill && regularEffectReady && shellAttackReady;
+    const critical = attackEffectReady ? triggerCritical(owner, skill, targets) : false;
     const directTargets = targets.length ? targets : [owner];
     const damageTargets = targetsForEffectScope(skill, owner, directTargets, ['造成伤害', '发起攻击', '攻击']);
     const burnTargets = burnSkill ? targetsForEffectScope(skill, owner, directTargets, ['点燃', '灼烧']) : [];
@@ -2313,7 +2380,7 @@
     effectTargets.forEach(target => {
       if (!regularEffectReady) return;
       const triggerCount = Math.max(1, multi);
-      if (!directDamage && attackSkill && damageTargetIds.has(target.id) && !target.dead) {
+      if (!directDamageForUse && attackEffectReady && damageTargetIds.has(target.id) && !target.dead) {
         for (let hit = 0; hit < triggerCount; hit += 1) {
           if (target.dead || target.hp <= 0) break;
           if (target.side !== owner.side) triggerBurnOnHit(owner, target, skill, genericAttackValue(skill, owner, 'damage'));
@@ -2329,15 +2396,18 @@
       if (frostTargetIds.has(target.id) && frostValue && attackSkill && target.hp > 0) {
         applyFrost(owner, target, valueBreakdown(skill, owner, frostValue).value, skill.name + '覆雪');
       }
-      if (damageTargetIds.has(target.id) && directDamage && attackSkill && target.hp > 0 && regularEffectReady) {
+      if (damageTargetIds.has(target.id) && directDamageForUse && attackEffectReady && target.hp > 0 && regularEffectReady) {
         for (let i = 0; i < multi; i += 1) {
           if (target.dead || target.hp <= 0) break;
           if (target.side !== owner.side) triggerBurnOnHit(owner, target, skill, genericAttackValue(skill, owner, 'damage'));
           let value = genericAttackValue(skill, owner, 'damage');
-          if (owner.name === '饿狼' && owner.firstMartialReady && /武技|攻击/.test(skill.type + skill.tags)) {
+          const wolfAnySkill = owner.name === '饿狼' && /第一个技能/.test(owner.effect || '');
+          const wolfCanDouble = owner.name === '饿狼' && (wolfAnySkill ? owner.firstSkillReady : owner.firstMartialReady) && (wolfAnySkill || /武技/.test(skill.type + skill.tags));
+          if (wolfCanDouble) {
             value *= 2;
-            owner.firstMartialReady = false;
-            log('饿狼本回合第一个武技技能伤害翻倍。', 'trigger', 'PET PROC');
+            if (wolfAnySkill) owner.firstSkillReady = false;
+            else owner.firstMartialReady = false;
+            log('饿狼本回合第一个' + (wolfAnySkill ? '技能' : '武技技能') + '伤害翻倍。', 'trigger', 'PET PROC');
           }
           damageUnit(owner, target, value, {attackHit:true, meta:'ATTACK'});
           if (/雷电牙|镇雷/.test(skill.name)) applyParalyze(owner, target, 1, skill.name + '命中');
@@ -2350,7 +2420,7 @@
         resolveDisplacement(skill, owner, target, mode, genericAttackValue(skill, owner, 'damage'));
       });
     }
-    if (regularEffectReady) triggerPassiveAttacks(owner, skill, targets);
+    if (attackEffectReady) triggerPassiveAttacks(owner, skill, targets);
 
     if (skill.name === '火中取栗' && owner.hp > 0 && regularEffectReady) applyExcited(owner, owner, valueFromEffect(skill.effect, [/给予灵兽自身(\d+)层亢奋/], 2), '火中取栗');
     if (skill.name === '元气弹' && explosion && countdownEffectReady) {
@@ -2375,7 +2445,12 @@
     if (critical && skill.name === '凌厉') skill.critBonus = 0;
     if (owner.name === '黑犬' && skill.size === 'medium') {
       const strongest = unitsOf(side, true).slice().sort((a, b) => b.atk - a.atk)[0];
-      if (strongest) { applyBuff(strongest, 'atk', 2, '黑犬中篇技能联动'); strongest.def += 1; }
+      if (strongest) {
+        const attack = valueFromEffect(owner.effect, [/提升(\d+)点攻击/], 2);
+        const defense = valueFromEffect(owner.effect, [/和(\d+)防御/], 1);
+        applyBuff(strongest, 'atk', attack, '黑犬中篇技能联动');
+        applyBuff(strongest, 'def', defense, '黑犬中篇技能联动');
+      }
     }
     if (owner.name === '白蔷薇' && burnSkill && directTargets[0] && directTargets[0].side !== owner.side) {
       log('白蔷薇只有在自身攻击触发灼烧伤害时才会治疗，不会被友方或花椒蟹被动额外伤害误触发。', 'trigger', 'RULE NOTE');
@@ -2383,7 +2458,7 @@
     if (owner.name === '花椒蟹' && burnSkill) {
       log('花椒蟹自身施加灼烧也会按“技能赋予灼烧后”触发自身被动。', 'trigger', 'RULE NOTE');
     }
-    triggerPostSkill(owner, skill, side, attackSkill && regularEffectReady);
+    triggerPostSkill(owner, skill, side, attackEffectReady);
     if (resetAfterEffect && countdownEffectReady) {
       resetCountdown(skill, '倒计时段效果触发');
       if (skill.name === '火中取栗' && !skill.immediateUseGuard) {
@@ -2399,6 +2474,7 @@
     }
     skill.used += 1;
     owner.skillUses += 1;
+    triggerSharkCopy(owner, skill, side, options);
     renderAll();
     checkVictory();
   }
@@ -2419,10 +2495,15 @@
       if (unit.weak > 0) unit.weak = Math.max(0, unit.weak - 1);
       if (unit.paralyze > 0) unit.paralyze = Math.max(0, unit.paralyze - 1);
     });
-    unitsOf(side, true).filter(unit => unit.name === '玄铁龟').forEach(unit => addEnergy(unit, 1, '玄铁龟回合结束充能'));
-    if (unitsOf(side, true).some(unit => unit.name === '角蛙')) {
-      team(side).skillDamageGrowth = (team(side).skillDamageGrowth || 0) + 2;
-      log('角蛙回合结束被动：本方后续技能伤害 +2。', 'trigger', 'PET PASSIVE');
+    unitsOf(side, true).filter(unit => unit.name === '玄铁龟').forEach(unit => {
+      const amount = valueFromEffect(unit.effect, [/回合结束时充能(\d+)/], 2);
+      addEnergy(unit, amount, '玄铁龟回合结束充能');
+    });
+    const frog = unitsOf(side, true).find(unit => unit.name === '角蛙');
+    if (frog) {
+      const amount = valueFromEffect(frog.effect, [/技能伤害\+(\d+)/], 2);
+      team(side).skillDamageGrowth = (team(side).skillDamageGrowth || 0) + amount;
+      log('角蛙回合结束被动：本方后续技能伤害 +' + amount + '。', 'trigger', 'PET PASSIVE');
     }
     log('—— ' + sideLabel(side) + '回合结束效果结算完毕 ——', 'trigger', 'TURN END');
   }
@@ -2540,12 +2621,22 @@
     if (state.winner) return;
     if (state.phase === 'resolving') {
       const skill = state.playerSkills[state.playerCursor];
-      if (skill) useSkill(skill, 'player');
+      if (skill) {
+        const owner = ownerOf(skill);
+        if (owner && owner.name === '乌角鲨') {
+          log('<strong>乌角鲨</strong> 跳过自身装备的 <strong>' + esc(skill.name) + '</strong>，等待本回合指定技能触发复制。', 'trigger', 'PET PROC');
+        } else useSkill(skill, 'player');
+      }
       state.playerCursor += 1;
       if (state.playerCursor >= state.playerSkills.length) finishPlayerTurn();
     } else if (state.phase === 'enemy-resolving') {
       const skill = state.enemySkills[state.enemyCursor];
-      if (skill) useSkill(skill, 'enemy');
+      if (skill) {
+        const owner = ownerOf(skill);
+        if (owner && owner.name === '乌角鲨') {
+          log('<strong>乌角鲨</strong> 跳过自身装备的 <strong>' + esc(skill.name) + '</strong>，等待本回合指定技能触发复制。', 'trigger', 'PET PROC');
+        } else useSkill(skill, 'enemy');
+      }
       state.enemyCursor += 1;
       if (state.enemyCursor >= state.enemySkills.length) finishEnemyTurn();
     }
@@ -2612,6 +2703,12 @@
     if (winner) {
       winner.points = (winner.points || 0) + 1;
       winner.history += 1;
+      const witness = unitsOf(winnerSide, false).filter(unit => unit.name === '见闻兽').length;
+      if (witness) {
+        const experience = 1 + witness;
+        winner.experience = (winner.experience || 0) + experience;
+        log('<strong>见闻兽</strong> 胜利结算：' + sideLabel(winnerSide) + '额外获得 ' + experience + ' 点经验（见闻兽在场 +1，存活站场再 +1）。', 'trigger', 'PET PASSIVE');
+      }
     }
     if (loser) loser.history += 1;
     ['player', 'enemy'].forEach(side => {
@@ -2879,6 +2976,10 @@
     }
     state.setupDraft.player.income -= cost;
     state.config.player.income = state.setupDraft.player.income;
+    if (kind === 'skill' && splitTags(skillCatalog(item.name).tags).includes('暗器')) {
+      state.setupDraft.player.darkArtifactPurchases = (Number(state.setupDraft.player.darkArtifactPurchases) || 0) + 1;
+      state.config.player.darkArtifactPurchases = state.setupDraft.player.darkArtifactPurchases;
+    }
     state.inventory[kind === 'skill' ? 'skills' : 'pets'].push(clone(item));
     state.shop[kind === 'skill' ? 'skills' : 'pets'][index] = null;
     log('战前购买 ' + item.name + '（' + cost + '金币），剩余金币 ' + state.config.player.income + '。', 'trigger', 'SHOP');

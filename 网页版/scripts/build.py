@@ -28,6 +28,19 @@ for s in w:
   base_tags=fields.get('词条')
   for variant in variants:variant['fields']['词条']=base_tags
   items.append(dict(id=f'item-{len(items)+1}',name=str(row[col]),kind='灵兽' if pet else '技能',tier=row[tier_col],fields=fields,effect=row[7 if pet else 5],source={'sheet':s.title,'row':i},variants=variants))
+# 编辑器补丁是图鉴的本地增量来源：同 id 覆盖表格条目，custom 追加编辑器新增条目。
+editor_patch_path=OUT/'scripts/editor-patch.json'
+editor_patch={}
+if editor_patch_path.exists():
+ editor_patch=json.loads(editor_patch_path.read_text(encoding='utf-8'))
+ overrides=editor_patch.get('overrides') or {}
+ if overrides:
+  items=[overrides.get(item['id'],item) for item in items]
+ known_ids={item['id'] for item in items}
+ for item in editor_patch.get('custom') or []:
+  if item['id'] not in known_ids:
+   items.append(item)
+   known_ids.add(item['id'])
 byname={x['name']:x for x in items}
 assert len(byname)==len(items)
 mechanisms=json.loads((OUT/'scripts/rules.json').read_text(encoding='utf-8'))
@@ -70,8 +83,14 @@ for preset in team_presets:
   size_text=f"{item['fields'].get('词条') or ''} {item['effect'] or ''}"
   slot_count+=3 if '长篇' in size_text else 2 if '中篇' in size_text else 1
  assert slot_count==10,(preset['id'],'skill slots',slot_count)
-meta={'itemCount':len(items),'petCount':sum(i['kind']=='灵兽' for i in items),'skillCount':sum(i['kind']=='技能' for i in items),'ruleCount':sum(len(m['rules']) for m in mechanisms),'mechanismCount':len(mechanisms),'teamPresetCount':len(team_presets),'sourceHashes':{f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest() for f in ['新数值.xlsx','交互关系.pdf']}}
+source_files=['新数值.xlsx','交互关系.pdf']
+if editor_patch_path.exists():source_files.append('网页版/scripts/editor-patch.json')
+meta={'itemCount':len(items),'petCount':sum(i['kind']=='灵兽' for i in items),'skillCount':sum(i['kind']=='技能' for i in items),'ruleCount':sum(len(m['rules']) for m in mechanisms),'mechanismCount':len(mechanisms),'teamPresetCount':len(team_presets),'sourceHashes':{f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest() for f in source_files}}
 (OUT/'graph-data.js').write_text('window.ATLAS_DATA = '+json.dumps(dict(items=items,mechanisms=mechanisms,examples=examples,teamPresets=team_presets,meta=meta),ensure_ascii=False)+';\n',encoding='utf-8')
 (OUT/'source-audit.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2),encoding='utf-8')
-for f in meta['sourceHashes']:shutil.copy2(ROOT/f,OUT/'source'/f)
+for f in meta['sourceHashes']:
+ if f.startswith('网页版/'):
+  shutil.copy2(ROOT/f,OUT/'source'/Path(f).name)
+ else:
+  shutil.copy2(ROOT/f,OUT/'source'/f)
 print(meta)

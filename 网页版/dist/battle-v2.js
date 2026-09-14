@@ -6,7 +6,7 @@
   const clone = value => JSON.parse(JSON.stringify(value));
 
   const ROWS = 5;
-  const COLS = 6;
+  const COLS = 4;
   const QUALITY = ['青铜', '白银', '黄金', '钻石'];
   const QUALITY_MULT = {青铜: 1, 白银: 2, 黄金: 4, 钻石: 8};
   const SIZE_LABEL = {short: '短篇', medium: '中篇', long: '长篇'};
@@ -191,7 +191,7 @@
 
   const defaultConfig = {
     player: {
-      level: 1, income: 20, history: 0, heroHp: 360,
+      level: 1, income: 20, history: 0, darkArtifactPurchases: 0, heroHp: 360,
       pets: [
         {name:'烁德童子', quality:'青铜'},
         {name:'花椒蟹', quality:'白银'},
@@ -230,6 +230,7 @@
       level: 1,
       income: 20,
       history: 0,
+      darkArtifactPurchases: 0,
       heroHp: Number(preset.heroHp) || 660,
       pets: clone(preset.pets).slice(0, 4),
       skills: clone(preset.skills).map(skill => ({name:skill.name, quality:skill.quality, owner:Number(skill.owner)}))
@@ -266,13 +267,16 @@
     enemySkills: [],
     setupDraft: null,
     configInfo: null,
-    setupSkillFilters: {player: '全部', enemy: '全部'}
+    setupSkillFilters: {player: '全部', enemy: '全部'},
+    positionSnapshots: {player: new Map(), enemy: new Map()},
+    pendingRevives: [],
+    turnStartResolved: false
   };
 
   function createHero(config, side) {
     const level = Math.max(1, Number(config.level) || 1);
     const maxHp = Math.max(1, Number(config.heroHp) || 100 + (level - 1) * 10);
-    return {side, level, gold: Math.max(0, Number(config.income) || 0), history: Math.max(0, Number(config.history) || 0), hp: maxHp, maxHp, skillDamage: 0, skillDamageGrowth: 0, points: 0};
+    return {side, level, gold: Math.max(0, Number(config.income) || 0), history: Math.max(0, Number(config.history) || 0), experience: 0, hp: maxHp, maxHp, skillDamage: 0, skillDamageGrowth: 0, points: 0};
   }
 
   function createPet(item, side, index) {
@@ -288,6 +292,7 @@
     const tags = String(qualityField(cat, quality, '词条', cat.tags) || '');
     const abilityEnergyCost = parseFirst(legacyEffect, [/消耗\s*(\d+)\s*点能量/], 0);
     const abilityCountdownMax = parseFirst(legacyEffect, [/倒计时\s*(\d+)/], 0);
+    const valueGrowth = parseFirst(effect, [/价值\s*\+\s*(\d+)/], QUALITY_MULT[quality] || 1);
     return {
       id: (side === 'player' ? 'p' : 'e') + (index + 1),
       side,
@@ -306,7 +311,9 @@
       tags,
       abilityEnergyCost,
       abilityCountdownMax,
-      energy: 0, maxEnergy: 12,
+      value: 3 * (QUALITY_MULT[quality] || 1),
+      valueGrowth,
+      energy: 0, maxEnergy: Infinity,
       shield: 0,
       burn: 0,
       poison: 0,
@@ -318,6 +325,8 @@
       rooted: 0,
       roundSkillDamage: 0,
       roundIgnite: 0,
+      permanentSkillDamage: 0,
+      permanentIgnite: 0,
       skillDamage: 0,
       regen: 0,
       critBonus: 0,
@@ -325,6 +334,7 @@
       permanentDef: 0,
       skillUses: 0,
       firstMartialReady: true,
+      firstSkillReady: true,
       passiveCountdown: abilityCountdownMax,
       abilityCountdown: abilityCountdownMax,
       reviveAt: null,
@@ -356,6 +366,7 @@
     const ammoMax = parseFirst(effectText, [/弹药\s*(\d+)/], 0);
     const baseCountdown = parseFirst(effectText, [/倒计时\s*(\d+)/], 0);
     const startCountdown = parseFirst(effectText, [/战斗开始时进入倒计时\s*(\d+)/], baseCountdown);
+    const hasBattleStartCountdown = /战斗开始时进入倒计时\s*\d+/.test(effectText);
     const explosionCost = parseFirst(effectText, [/爆能\s*(\d+)/], 0);
     const countdownIndex = effectText.indexOf('倒计时');
     const explosionIndex = effectText.indexOf('爆能');
@@ -390,12 +401,13 @@
       ammo: ammoMax,
       baseCountdown,
       countdownStart: startCountdown || baseCountdown,
-      countdown: explosionIndex >= 0 && countdownIndex >= 0 && explosionIndex < countdownIndex ? 0 : (startCountdown || baseCountdown),
+      countdown: hasBattleStartCountdown ? 0 : (explosionIndex >= 0 && countdownIndex >= 0 && explosionIndex < countdownIndex ? 0 : (startCountdown || baseCountdown)),
       explosionCost,
       explosionBeforeCountdown: explosionIndex >= 0 && countdownIndex >= 0 && explosionIndex < countdownIndex,
       countdownBeforeExplosion: explosionIndex >= 0 && countdownIndex >= 0 && countdownIndex < explosionIndex,
       countdownTailOnly: !!baseCountdown && !hasIndependentEffect,
       explosionTailOnly: !!explosionCost && !/造成伤害|点燃|淬毒|覆雪|结霜|霜冻|护盾|护甲|治疗|再生|获得|赋予|施加|充能|装填|提升|攻击/.test(explosionIndex >= 0 ? effectText.slice(0, explosionIndex) : ''),
+      battleStartResolved: false,
       explosionAvailable: true,
       scale,
       damageBonus: 0,
@@ -406,6 +418,7 @@
       healBonus: 0,
       regenBonus: 0,
       critBonus: 0,
+      breakShellBonus: 0,
       used: 0,
       lastTarget: null
     };
@@ -420,10 +433,18 @@
     state.enemy = createHero(config.enemy, 'enemy');
     state.player.pets = config.player.pets.filter(item => item.name).map((item, i) => createPet(item, 'player', i));
     state.enemy.pets = config.enemy.pets.filter(item => item.name).map((item, i) => createPet(item, 'enemy', i));
+    const purchasedDarkArtifacts = Math.max(0, Number(config.player.darkArtifactPurchases) || 0);
+    state.player.pets.forEach(pet => {
+      if (pet.name === '吞金鼠' && purchasedDarkArtifacts) pet.value += purchasedDarkArtifacts * pet.valueGrowth;
+    });
     state.playerSkills = config.player.skills.filter(item => item.name).map((item, i) => createSkill(item, 'player', i, state.player.pets));
     state.enemySkills = config.enemy.skills.filter(item => item.name).map((item, i) => createSkill(item, 'enemy', i, state.enemy.pets));
     placeInitialUnits(state.player.pets, 'player');
     placeInitialUnits(state.enemy.pets, 'enemy');
+    capturePositionSnapshot('player');
+    capturePositionSnapshot('enemy');
+    state.pendingRevives = [];
+    state.turnStartResolved = false;
     state.round = 1;
     state.action = 0;
     state.side = 'player';
@@ -444,6 +465,9 @@
     state.winner = null;
     state.shop = makeShop(0);
     battleStartEffects();
+    startEffects('player');
+    state.turnStartResolved = true;
+    state.phase = 'position';
     if (!silent) log('已应用新配置，战斗重置为第1回合的部署阶段。', 'trigger', 'CONFIG');
     renderAll();
   }
@@ -475,6 +499,10 @@
     state.logs.push({round: state.round, action: state.action, text, kind, meta});
     if (state.logs.length > 150) state.logs.shift();
     renderLog();
+  }
+
+  function logValue(kind, value) {
+    return '<strong class="log-value log-' + kind + '">' + esc(value) + '</strong>';
   }
 
   function trace(text, kind = 'trigger') {
@@ -509,6 +537,7 @@
   }
 
   function phaseText() {
+    if (state.phase === 'position' && pendingReviveFor('player')) return '选择复活位置';
     const map = {
       position: '部署与走位',
       'start-resolving': '回合开始结算',
@@ -544,9 +573,9 @@
     const p = state.player;
     const e = state.enemy;
     $('#team-context').innerHTML =
-      '<div class="team-context-card ally-context"><span>己方英雄</span><strong>' + p.hp + ' / ' + p.maxHp + '</strong><small>等级 ' + p.level + ' · 金币 ' + p.gold + ' · 胜场 ' + p.history + '</small></div>' +
-      '<div class="phase-context"><b>' + esc(phaseText()) + '</b><small>' + (state.phase === 'position' ? '可移动己方灵宠并调整技能顺序' : state.phase === 'finished' ? '可重置或重新配置战斗' : '所有效果按日志顺序记录') + '</small></div>' +
-      '<div class="team-context-card enemy-context"><span>敌方英雄</span><strong>' + e.hp + ' / ' + e.maxHp + '</strong><small>等级 ' + e.level + ' · 金币 ' + e.gold + ' · 胜场 ' + e.history + '</small></div>';
+      '<div class="team-context-card ally-context"><span>己方英雄</span><strong>' + p.hp + ' / ' + p.maxHp + '</strong><small>等级 ' + p.level + ' · 金币 ' + p.gold + ' · 胜场 ' + p.history + ' · 经验 ' + p.experience + '</small></div>' +
+      '<div class="phase-context"><b>' + esc(phaseText()) + '</b><small>' + (pendingReviveFor('player') ? '请点击棋盘空格选择复活位置' : state.phase === 'position' ? '可移动己方灵宠并调整技能顺序' : state.phase === 'finished' ? '可重置或重新配置战斗' : '所有效果按日志顺序记录') + '</small></div>' +
+      '<div class="team-context-card enemy-context"><span>敌方英雄</span><strong>' + e.hp + ' / ' + e.maxHp + '</strong><small>等级 ' + e.level + ' · 金币 ' + e.gold + ' · 胜场 ' + e.history + ' · 经验 ' + e.experience + '</small></div>';
   }
 
   function cellAt(row, col) {
@@ -699,7 +728,7 @@
     if (text.includes('第一二格及其左右相邻格')) return forward >= 1 && forward <= 2 && lateral <= 1;
     if (text.includes('第一格及其左右两格')) return forward === 1 && lateral <= 1;
     if (text.includes('第二格及其左右两格')) return forward === 2 && lateral <= 1;
-    if (text.includes('第二格或第三格') || text.includes('第二格和第三格')) return (forward === 2 || forward === 3) && lateral === 0;
+    if (text.includes('第二格或第三格') || text.includes('第二格和第三格') || text.includes('第二和第三格')) return (forward === 2 || forward === 3) && lateral === 0;
     if (text.includes('直线')) return lateral === 0 && forward > 0 && (!text.includes('范围') || forward <= 5);
     if (text.includes('三格中最远')) return lateral === 0 && forward >= 1 && forward <= 3;
     if (text.includes('第三格')) return forward === 3 && lateral === 0;
@@ -787,11 +816,14 @@
     if (kind === 'damage') {
       add('本方技能伤害提升', currentTeam && currentTeam.skillDamage);
       add('灵宠本回合伤害提升', skill && !skill.preview && owner && owner.roundSkillDamage);
+      add('灵宠战斗持续伤害提升', skill && !skill.preview && owner && owner.permanentSkillDamage);
       add('灵宠技能伤害提升', skill && !skill.preview && owner && owner.skillDamage);
       add('技能自身伤害提升', skill && !skill.preview && skill.damageBonus);
+      add('破壳消耗护盾附加伤害', skill && !skill.preview && skill.breakShellBonus);
     }
     if (kind === 'burn') {
       add('本回合点燃提升', skill && !skill.preview && owner && owner.roundIgnite);
+      add('灵宠战斗持续点燃提升', skill && !skill.preview && owner && owner.permanentIgnite);
       add('技能自身点燃提升', skill && !skill.preview && skill.burnBonus);
     }
     if (kind === 'poison') add('技能自身淬毒提升', skill && skill.poisonBonus);
@@ -816,8 +848,13 @@
       } else attack = Math.max(0, Math.round(owner.atk));
     }
     const bonuses = valueBonusParts(skill, owner, entry.kind);
-    const value = Math.max((entry.kind === 'burn' || entry.kind === 'poison' || entry.kind === 'frost') ? 1 : 0, base + attack + bonuses.reduce((sum, part) => sum + part.value, 0));
-    return {kind: entry.kind, label: entry.label, base, attack, bonuses, value, plus: entry.plus};
+    let value = Math.max((entry.kind === 'burn' || entry.kind === 'poison' || entry.kind === 'frost') ? 1 : 0, base + attack + bonuses.reduce((sum, part) => sum + part.value, 0));
+    let multiplier = 1;
+    if (entry.kind === 'poison' && owner && owner.name === '蕈章' && owner.shield > 0) {
+      multiplier = 2;
+      value *= multiplier;
+    }
+    return {kind: entry.kind, label: entry.label, base, attack, bonuses, value, plus: entry.plus, multiplier};
   }
 
   function skillValueBreakdowns(skill, owner) {
@@ -837,6 +874,7 @@
     const parts = ['技能基础 ' + item.base];
     if (item.attack) parts.push('灵宠攻击 ' + item.attack + (item.kind === 'burn' || item.kind === 'poison' || item.kind === 'frost' ? '（按篇幅比例）' : ''));
     item.bonuses.forEach(part => parts.push(part.label + ' ' + (part.value > 0 ? '+' : '') + part.value));
+    if (item.multiplier && item.multiplier !== 1) parts.push('蕈章护盾淬毒翻倍 ×' + item.multiplier);
     return parts.join(' + ') + ' = ' + item.value;
   }
 
@@ -909,7 +947,12 @@
       });
     }
 
-    if (state.phase === 'position' && selected && selected.side === 'player' && !selected.dead) {
+    if (state.phase === 'position' && pendingReviveFor('player')) {
+      $$('.cell').forEach(cell => {
+        if (!cell.querySelector('.unit')) cell.classList.add('revive-target');
+      });
+      showToast('请选择 ' + (unitById(pendingReviveFor('player').unitId)?.name || '灵宠') + ' 的复活位置');
+    } else if (state.phase === 'position' && selected && selected.side === 'player' && !selected.dead) {
       if (selected.rooted > 0) {
         showToast(selected.name + ' 本回合处于禁足状态', true);
       } else {
@@ -988,13 +1031,15 @@
       return;
     }
     const hpPct = Math.max(0, Math.round(unit.hp / unit.maxHp * 100));
-    const enPct = Math.max(0, Math.round(unit.energy / unit.maxEnergy * 100));
+    const energyReference = Math.max(1, unit.abilityEnergyCost || 6);
+    const enPct = unit.energy > 0 ? Math.min(100, Math.round(unit.energy / energyReference * 100)) : 0;
     const equipped = skillList(unit.side).filter(item => item.owner === unit.id);
     const cat = petCatalog(unit.name);
     const explosionSkills = equipped.filter(item => item.explosionCost);
     const abilityTags = [];
     if (unit.abilityEnergyCost) abilityTags.push('能力爆能（' + unit.energy + ' / ' + unit.abilityEnergyCost + '）');
     if (unit.abilityCountdownMax) abilityTags.push('能力倒计时（' + (unit.abilityCountdown == null ? unit.abilityCountdownMax : unit.abilityCountdown) + ' / ' + unit.abilityCountdownMax + '）');
+    if (unit.name === '吞金鼠') abilityTags.push('当前物品价值 ' + unit.value);
     const abilityHtml = '<div class="detail-label">灵宠能力</div><p class="focus-effect">' + esc(unit.effect || '暂无简述') + '</p>' + (abilityTags.length ? '<div class="tag-row">' + abilityTags.map(tag => '<span class="tag explosion-tag">' + esc(tag) + '</span>').join('') + '</div>' : '');
     const equippedHtml = equipped.length
       ? equipped.map(item => '<button type="button" class="detail-skill-link" data-skill-info="' + esc(item.id) + '"><span>' + esc(item.name) + '<small>' + esc(valueSummary(item, unit)) + '</small></span><small>' + esc(explosionLabel(item) || '查看技能详情') + '</small></button>').join('')
@@ -1004,9 +1049,9 @@
       : '';
     detail.innerHTML =
       '<div class="focus-card"><div class="focus-top"><div class="focus-icon ' + (unit.side === 'enemy' ? 'enemy' : 'ally') + '">' + esc(unit.icon) + '</div><div><div class="focus-name">' + esc(unit.name) + '</div><div class="focus-sub">' + sideLabel(unit.side) + '灵宠 · ' + esc(unit.quality) + ' · 坐标 ' + coord(unit.pos) + '</div></div></div><p class="focus-effect">' + esc(unit.effect || cat.effect) + '</p></div>' +
-      '<div class="stat-grid"><div class="stat-box"><span>生命</span><strong>' + unit.hp + ' / ' + unit.maxHp + '</strong></div><div class="stat-box"><span>攻击 / 防御</span><strong>' + unit.atk + ' / ' + unit.def + '</strong></div><div class="stat-box"><span>能量</span><strong>' + unit.energy + ' / ' + unit.maxEnergy + '</strong></div><div class="stat-box"><span>护盾</span><strong>' + unit.shield + '</strong></div></div>' +
+      '<div class="stat-grid"><div class="stat-box"><span>生命</span><strong>' + unit.hp + ' / ' + unit.maxHp + '</strong></div><div class="stat-box"><span>攻击 / 防御</span><strong>' + unit.atk + ' / ' + unit.def + '</strong></div><div class="stat-box"><span>能量</span><strong>' + unit.energy + ' / ∞</strong></div><div class="stat-box"><span>护盾</span><strong>' + unit.shield + '</strong></div></div>' +
       '<div class="meter"><div class="meter-line"><span>生命状态</span><b>' + hpPct + '%</b></div><div class="meter-track"><i class="meter-fill" style="width:' + hpPct + '%"></i></div></div>' +
-      '<div class="meter"><div class="meter-line"><span>能量</span><b>' + unit.energy + ' / ' + unit.maxEnergy + '</b></div><div class="meter-track"><i class="meter-fill energy" style="width:' + enPct + '%"></i></div></div>' +
+      '<div class="meter"><div class="meter-line"><span>能量（无上限）</span><b>当前 ' + unit.energy + '</b></div><div class="meter-track"><i class="meter-fill energy" style="width:' + enPct + '%"></i></div></div>' +
       '<div class="detail-label">状态与定位</div><div class="tag-row">' + stateTags(unit).map(tag => '<span class="tag">' + esc(tag) + '</span>').join('') + '</div>' +
       abilityHtml +
       '<div class="detail-label">装备技能</div><div class="detail-skill-list">' + equippedHtml + '</div>' + explosionHtml;
@@ -1061,15 +1106,18 @@
   }
 
   function renderTop() {
-    const stateText = state.phase === 'finished' ? '战斗结束' : state.auto ? '自动结算中' : state.phase === 'position' ? '等待部署' : '已暂停';
+    const awaitingRevive = !!pendingReviveFor('player');
+    const stateText = state.phase === 'finished' ? '战斗结束' : awaitingRevive ? '等待选择复活位置' : state.auto ? '自动结算中' : state.phase === 'position' ? '等待部署' : '已暂停';
     $('#battle-state-text').textContent = stateText;
     $('#turn-side-label').textContent = sideLabel(state.side) + '回合';
     $('#round-number').textContent = state.round;
     $('#action-number').textContent = state.action;
     const run = $('#run-btn');
-    run.textContent = state.phase === 'position' ? '开始战斗' : state.auto ? '暂停战斗' : state.phase === 'finished' ? '重新开始' : '继续战斗';
+    run.textContent = awaitingRevive ? '请选择复活位置' : state.phase === 'position' ? '开始战斗' : state.auto ? '暂停战斗' : state.phase === 'finished' ? '重新开始' : '继续战斗';
+    run.disabled = awaitingRevive;
     $('#auto-btn').textContent = state.auto ? '停止自动' : '自动播放';
-    $('#step-btn').disabled = state.phase === 'finished';
+    $('#auto-btn').disabled = awaitingRevive;
+    $('#step-btn').disabled = state.phase === 'finished' || awaitingRevive;
   }
 
   function renderAll() {
@@ -1092,10 +1140,10 @@
     if (!unit || unit.dead || unit.hp <= 0 || unit.frost <= 0) return;
     const before = unit.frost;
     const damage = before * 2;
-    log('<strong>' + esc(unit.name) + '</strong> 因' + esc(reason || '位置改变') + '触发霜冻：层数 ' + before + '，造成 ' + damage + ' 点霜冻伤害。', 'trigger', 'FROST MOVE');
+    log('<strong>' + esc(unit.name) + '</strong> 因' + esc(reason || '位置改变') + '触发霜冻：层数 ' + logValue('frost', before) + '，造成 ' + logValue('frost', damage) + ' 点霜冻伤害。', 'trigger', 'FROST MOVE');
     damageUnit(null, unit, damage, {status:'霜冻', meta:'FROST MOVE'});
     unit.frost = Math.ceil(before / 2);
-    log('<strong>' + esc(unit.name) + '</strong> 霜冻触发后层数减半：' + before + ' → ' + unit.frost + '（向上取整）。', 'trigger', 'FROST MOVE');
+    log('<strong>' + esc(unit.name) + '</strong> 霜冻触发后层数减半：' + logValue('frost', before) + ' → ' + logValue('frost', unit.frost) + '（向上取整）。', 'trigger', 'FROST MOVE');
     trace(unit.name + ' 霜冻 ' + before + '→' + unit.frost, 'trigger');
   }
 
@@ -1108,7 +1156,88 @@
     return true;
   }
 
+  function capturePositionSnapshot(side) {
+    const snapshot = new Map();
+    unitsOf(side, false).forEach(unit => snapshot.set(unit.id, unit.pos.slice()));
+    state.positionSnapshots[side] = snapshot;
+  }
+
+  function summarizePositionChanges(side) {
+    const snapshot = state.positionSnapshots[side] || new Map();
+    let changed = 0;
+    unitsOf(side, false).forEach(unit => {
+      const before = snapshot.get(unit.id);
+      if (!before || !unit.pos || (before[0] === unit.pos[0] && before[1] === unit.pos[1])) return;
+      changed += 1;
+      log('<strong>' + esc(unit.name) + '</strong> 移动阶段坐标变化：' + coord(before) + ' → ' + coord(unit.pos) + '。', 'trigger', 'POSITION SUMMARY');
+    });
+    if (!changed) log(sideLabel(side) + '移动阶段坐标变化：无。', 'trigger', 'POSITION SUMMARY');
+    capturePositionSnapshot(side);
+  }
+
+  function pendingReviveFor(side) {
+    return state.pendingRevives.find(item => item.side === side) || null;
+  }
+
+  function queueRevive(unit, forced = false) {
+    if (!unit || !unit.dead || state.pendingRevives.some(item => item.unitId === unit.id)) return;
+    state.pendingRevives.push({unitId: unit.id, side: unit.side, forced});
+    log('<strong>' + esc(unit.name) + '</strong> 满足复活条件，等待' + sideLabel(unit.side) + '操控者在移动阶段选择复活位置。', 'trigger', 'REVIVE');
+  }
+
+  function placePendingRevive(row, col) {
+    const pending = pendingReviveFor('player');
+    if (!pending) return false;
+    if (allUnits().some(unit => !unit.dead && unit.pos[0] === row && unit.pos[1] === col)) {
+      showToast('该位置已有灵宠，不能选择为复活位置', true);
+      return false;
+    }
+    const unit = unitById(pending.unitId);
+    if (!unit) return false;
+    state.pendingRevives = state.pendingRevives.filter(item => item !== pending);
+    reviveUnit(unit, pending.forced, [row, col]);
+    state.selectedId = unit.id;
+    state.selectedSkill = null;
+    if (pendingReviveFor('player')) {
+      state.selectedId = unitById(pendingReviveFor('player').unitId)?.id || state.selectedId;
+      log('请继续为下一只待复活灵宠选择位置。', 'trigger', 'REVIVE');
+    } else {
+      log('己方复活位置选择完成；点击开始战斗继续结算。', 'trigger', 'REVIVE');
+    }
+    renderAll();
+    return true;
+  }
+
+  function placeEnemyPendingRevives() {
+    pendingRevivesFor('enemy').forEach(pending => {
+      const unit = unitById(pending.unitId);
+      if (!unit) return;
+      const occupied = new Set(allUnits().filter(item => !item.dead && item.id !== unit.id).map(item => item.pos.join(',')));
+      let position = [0, unit.slot % COLS];
+      for (let row = 0; row < ROWS && occupied.has(position.join(',')); row += 1) {
+        for (let col = 0; col < COLS; col += 1) {
+          if (!occupied.has(row + ',' + col)) {
+            position = [row, col];
+            row = ROWS;
+            break;
+          }
+        }
+      }
+      state.pendingRevives = state.pendingRevives.filter(item => item !== pending);
+      reviveUnit(unit, pending.forced, position);
+      log('<strong>' + esc(unit.name) + '</strong> 敌方AI选择复活位置 ' + coord(position) + '。', 'trigger', 'AI REVIVE');
+    });
+  }
+
+  function pendingRevivesFor(side) {
+    return state.pendingRevives.filter(item => item.side === side);
+  }
+
   function handleCellClick(row, col) {
+    if (state.phase === 'position' && pendingReviveFor('player')) {
+      placePendingRevive(row, col);
+      return;
+    }
     const occupied = allUnits().find(unit => !unit.dead && unit.pos[0] === row && unit.pos[1] === col);
     if (occupied) {
       state.selectedId = occupied.id;
@@ -1131,11 +1260,7 @@
       || equipped.find(skill => skillAvailability(skill) === '可用')
       || equipped[0]
       || null;
-    moveUnit(unit, [row, col], {
-      reason: '玩家移动',
-      meta: 'MOVE',
-      message: (old, next) => '<strong>' + esc(unit.name) + '</strong> 从 ' + coord(old) + ' 移动到 ' + coord(next) + '。'
-    });
+    moveUnit(unit, [row, col], {reason: '玩家移动'});
     renderAll();
   }
 
@@ -1190,7 +1315,7 @@
   function addEnergy(unit, amount, reason) {
     if (!unit || unit.dead || !amount) return;
     const before = unit.energy;
-    unit.energy = Math.max(0, Math.min(unit.maxEnergy, unit.energy + amount));
+    unit.energy = Math.max(0, unit.energy + amount);
     const actual = unit.energy - before;
     if (actual) log('<strong>' + esc(unit.name) + '</strong> ' + esc(reason || '获得能量') + ' <strong>+' + actual + '</strong>，当前 ' + unit.energy + '。', 'trigger', 'ENERGY');
   }
@@ -1239,7 +1364,10 @@
   function addSkillGrowth(skill, field, amount, reason) {
     if (!skill || !amount) return;
     skill[field] = (skill[field] || 0) + amount;
-    log('<strong>' + esc(skill.name) + '</strong> ' + esc(reason || '获得成长') + ' <strong>+' + amount + '</strong>，当前 +' + skill[field] + '。', 'trigger', 'GROWTH');
+    const growthKind = field === 'damageBonus' ? 'damage' : field === 'burnBonus' ? 'burn' : field === 'poisonBonus' ? 'poison' : field === 'frostBonus' ? 'frost' : field === 'shieldBonus' || field === 'healBonus' || field === 'regenBonus' ? 'heal' : null;
+    const amountText = growthKind ? logValue(growthKind, '+' + amount) : '<strong>+' + amount + '</strong>';
+    const totalText = growthKind ? logValue(growthKind, '+' + skill[field]) : '<strong>+' + skill[field] + '</strong>';
+    log('<strong>' + esc(skill.name) + '</strong> ' + esc(reason || '获得成长') + ' ' + amountText + '，当前 ' + totalText + '。', 'trigger', 'GROWTH');
     trace(skill.name + ' ' + field + ' +' + amount, 'trigger');
   }
 
@@ -1515,14 +1643,15 @@
       absorbed = Math.min(target.shield, raw);
       target.shield -= absorbed;
       raw -= absorbed;
-      log('<strong>' + esc(target.name) + '</strong> 的护盾吸收 <strong>' + absorbed + '</strong> 点伤害。', 'trigger', 'SHIELD');
+      log('<strong>' + esc(target.name) + '</strong> 的护盾吸收 ' + logValue('shield', absorbed) + ' 点伤害。', 'trigger', 'SHIELD');
     }
     const defense = options.ignoreDefense ? 0 : Math.max(0, target.def);
     const actual = Math.max(0, raw - defense);
     if (actual > 0) {
       target.hp = Math.max(0, target.hp - actual);
       state.damage += actual;
-      log((source ? '<strong>' + esc(source.name) + '</strong> 对 ' : '') + '<strong>' + esc(target.name) + '</strong> 造成 <strong>' + actual + '</strong> 点' + (options.status ? esc(options.status) : '') + '伤害。', options.status ? 'trigger' : 'output', options.meta || 'DAMAGE');
+      const damageKind = options.status === '点燃' || options.status === '灼烧' ? 'burn' : options.status === '剧毒' || options.status === '淬毒' ? 'poison' : options.status === '霜冻' || options.status === '覆雪' ? 'frost' : 'damage';
+      log((source ? '<strong>' + esc(source.name) + '</strong> 对 ' : '') + '<strong>' + esc(target.name) + '</strong> 造成 ' + logValue(damageKind, actual) + ' 点' + (options.status ? esc(options.status) : '') + '伤害。', options.status ? 'trigger' : 'output', options.meta || 'DAMAGE');
       trace((options.status || '伤害') + ' ' + target.name + ' -' + actual, options.status ? 'trigger' : 'output');
     } else {
       log('<strong>' + esc(target.name) + '</strong> 的防御抵消了本次伤害。', 'trigger', options.meta || 'DEFENSE');
@@ -1557,7 +1686,7 @@
     unit.reviveAt = state.round + 2;
     const hero = team(unit.side);
     hero.hp = Math.max(0, hero.hp - unit.maxHp);
-    log('<strong>' + esc(unit.name) + '</strong> 被击倒；' + sideLabel(unit.side) + '英雄失去 <strong>' + unit.maxHp + '</strong> 点生命，预计第 ' + unit.reviveAt + ' 回合复活。', 'warn', 'DEATH');
+    log('<strong>' + esc(unit.name) + '</strong> 被击倒；' + sideLabel(unit.side) + '英雄失去 ' + logValue('damage', unit.maxHp) + ' 点生命，预计第 ' + unit.reviveAt + ' 回合复活。', 'warn', 'DEATH');
     trace(unit.name + ' 阵亡，英雄 -' + unit.maxHp, 'output');
     if (source && source.name === '赤精鱼') addEnergy(source, 4, '赤精鱼击杀奖励');
     if (source && source.name === '幼熊') {
@@ -1569,11 +1698,11 @@
     if (hero.hp <= 0) finishBattle(opponentSide(unit.side));
   }
 
-  function reviveUnit(unit, forced) {
+  function reviveUnit(unit, forced, requestedPosition) {
     if (!unit || !unit.dead) return;
     const occupied = new Set(allUnits().filter(item => !item.dead && item.id !== unit.id).map(item => item.pos.join(',')));
     const preferredRow = unit.side === 'player' ? ROWS - 1 : 0;
-    let position = [preferredRow, unit.slot % COLS];
+    let position = Array.isArray(requestedPosition) ? requestedPosition.slice() : [preferredRow, unit.slot % COLS];
     if (occupied.has(position.join(','))) {
       for (let row = 0; row < ROWS; row += 1) {
         for (let col = 0; col < COLS; col += 1) {
@@ -1595,6 +1724,7 @@
     unit.shield = 0;
     unit.reviveAt = null;
     unit.pos = position;
+    if (state.positionSnapshots[unit.side]) state.positionSnapshots[unit.side].set(unit.id, position.slice());
     log('<strong>' + esc(unit.name) + '</strong> ' + (forced ? '被强制复活' : '复活') + '，回到 ' + coord(position) + '。', 'trigger', 'REVIVE');
   }
 
@@ -1606,6 +1736,7 @@
       unit.roundSkillDamage = 0;
       unit.roundIgnite = 0;
       unit.firstMartialReady = true;
+      unit.firstSkillReady = true;
       unit.rooted = 0;
       unit.silence = 0;
     });
@@ -1653,7 +1784,8 @@
         unit.passiveCountdown = unit.abilityCountdown;
         log('铁丸子倒计时 -1，当前为 ' + unit.abilityCountdown + '。', 'trigger', 'COUNTDOWN');
       } else {
-        const reload = skillList(side).find(skill => skill.ammoMax && skill.ammo < skill.ammoMax);
+        const reloadCandidates = skillList(side).filter(skill => skill.owner === unit.id && skill.ammoMax && skill.ammo < skill.ammoMax);
+        const reload = pseudoRandomTargets(reloadCandidates, {id:'iron-ball-' + unit.id + '-' + state.round}, 1)[0];
         if (reload) {
           const amount = valueFromEffect(unit.legacyEffect || unit.effect, [/装填(\d+)枚弹药/], 2);
           reload.ammo = Math.min(reload.ammoMax, reload.ammo + amount);
@@ -1674,23 +1806,30 @@
       });
       log('通灵钟在场：己方倒计时需求减少1回合（本次影响 ' + changed + ' 个技能）。', 'trigger', 'PET PASSIVE');
     }
+    const witness = units.filter(unit => unit.name === '见闻兽');
+    witness.forEach(unit => {
+      const chance = valueFromEffect(unit.effect, [/暴击率\+(\d+)%/], 10);
+      log('<strong>见闻兽</strong> 在场：己方所有灵兽暴击率 +' + chance + '%。', 'trigger', 'PET PASSIVE');
+    });
   }
 
   function startEnergy(side) {
     const units = unitsOf(side, true);
     units.filter(unit => unit.name === '烁德童子').forEach(unit => {
-      addEnergy(unit, 1, '回合开始被动充能');
+      const amount = valueFromEffect(unit.effect, [/自身获得(\d+)点能量/], 1);
+      addEnergy(unit, amount, '回合开始被动充能');
       const adjacent = units.filter(other => other.id !== unit.id && Math.abs(other.pos[0] - unit.pos[0]) + Math.abs(other.pos[1] - unit.pos[1]) <= 1);
-      if (adjacent[0]) addEnergy(adjacent[0], 1, '烁德童子相邻充能');
+      const target = pseudoRandomTargets(adjacent, {id:'pet-energy-' + unit.id}, 1)[0];
+      if (target) addEnergy(target, amount, '烁德童子相邻充能');
     });
     units.filter(unit => unit.name === '赤精鱼').forEach(unit => {
       const cost = valueFromEffect(unit.legacyEffect || unit.effect, [/消耗(\d+)点能量/], 5);
       const damage = valueFromEffect(unit.legacyEffect || unit.effect, [/技能伤害提升(\d+)/], 4);
       const ignite = valueFromEffect(unit.legacyEffect || unit.effect, [/点燃提升(\d+)/], 1);
       if (unit.energy >= cost && consumeEnergy(unit, cost, '赤精鱼回合开始爆能')) {
-        unit.roundSkillDamage += damage;
-        unit.roundIgnite += ignite;
-        log('赤精鱼爆能成功：本回合自身技能伤害 +' + damage + '，点燃 +' + ignite + '。', 'trigger', 'PET EXPLOSION');
+        unit.permanentSkillDamage += damage;
+        unit.permanentIgnite += ignite;
+        log('赤精鱼爆能成功：自身技能伤害 +' + damage + '、点燃 +' + ignite + '，持续至本场战斗结束。', 'trigger', 'PET EXPLOSION');
       } else {
         log('赤精鱼能量不足' + cost + '，本回合不触发爆能特性。', 'trigger', 'PET EXPLOSION');
       }
@@ -1714,7 +1853,7 @@
     units.filter(unit => unit.name === '吞金鼠').forEach(unit => {
       const lowest = units.slice().sort((a, b) => a.hp - b.hp || a.id.localeCompare(b.id))[0];
       const multiplier = valueFromEffect(unit.legacyEffect || unit.effect, [/价值\*(\d+)/], QUALITY_MULT[unit.quality] || 1);
-      if (lowest) healUnit(unit, lowest, 3 * multiplier, '吞金鼠回合开始治疗');
+      if (lowest) healUnit(unit, lowest, unit.value * multiplier, '吞金鼠回合开始治疗（物品价值 ' + unit.value + ' × ' + multiplier + '）');
     });
   }
 
@@ -1723,7 +1862,21 @@
       const shield = valueFromEffect(unit.legacyEffect || unit.effect, [/获得(\d+)护盾/], 20);
       applyShield(null, unit, shield, '岩豚战斗开始');
     });
-    ['player', 'enemy'].forEach(side => runSimpleRulesForSide('战斗开始时', side));
+    ['player', 'enemy'].forEach(side => {
+      runSimpleRulesForSide('战斗开始时', side);
+      skillList(side).forEach(skill => {
+        const battleStartText = skill.legacyEffect + ' ' + (Array.isArray(skill.tags) ? skill.tags.join(' ') : '');
+        if (skill.battleStartResolved || !/战斗开始时/.test(battleStartText)) return;
+        skill.battleStartResolved = true;
+        const startCountdown = parseFirst(battleStartText, [/战斗开始时进入倒计时\s*(\d+)/], 0);
+        if (startCountdown) {
+          skill.countdown = startCountdown;
+          log('<strong>' + esc(skill.name) + '</strong> 战斗开始时效果：不受技能栏位置影响，倒计时设为 ' + startCountdown + '。', 'trigger', 'BATTLE START');
+        } else {
+          log('<strong>' + esc(skill.name) + '</strong> 含有战斗开始时效果，按原始文案记录；当前未发现可独立解析的数值公式。', 'trigger', 'BATTLE START');
+        }
+      });
+    });
   }
 
   function startEffects(side) {
@@ -1731,10 +1884,10 @@
     state.roundEvents = 0;
     log('—— ' + sideLabel(side) + '第 ' + state.round + ' 回合开始：复活检查 ——', 'trigger', 'TURN START');
     const units = unitsOf(side, false);
-    units.filter(unit => unit.dead && unit.reviveAt != null && unit.reviveAt <= state.round).forEach(unit => reviveUnit(unit, false));
+    units.filter(unit => unit.dead && unit.reviveAt != null && unit.reviveAt <= state.round).forEach(unit => queueRevive(unit, false));
     if (!unitsOf(side, true).length) {
       const forced = units.find(unit => unit.dead);
-      if (forced) reviveUnit(forced, true);
+      if (forced) queueRevive(forced, true);
     }
     resetDefense(side);
     log('—— ' + sideLabel(side) + '回合开始：倒计时与灵宠被动 ——', 'trigger', 'TURN START');
@@ -1753,13 +1906,13 @@
     const actual = Math.min(value, target.maxHp - target.hp);
     if (actual > 0) {
       target.hp += actual;
-      log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 恢复 <strong>' + actual + '</strong> 点生命。', 'trigger', 'HEAL');
+      log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 恢复 ' + logValue('heal', actual) + ' 点生命。', 'trigger', 'HEAL');
       trace(target.name + ' 治疗 +' + actual, 'trigger');
     } else {
-      log('<strong>' + esc(target.name) + '</strong> 已满生命，治疗没有溢出。', 'trigger', 'HEAL');
+      log('<strong>' + esc(target.name) + '</strong> 治疗量 ' + logValue('heal', value) + '，但已满生命，治疗没有溢出。', 'trigger', 'HEAL');
     }
     if (target.name === '沼泽鼠' && actual > 0) {
-      const enemy = unitsOf(opponentSide(target.side), true).sort((a, b) => a.hp - b.hp)[0];
+      const enemy = pseudoRandomTargets(unitsOf(opponentSide(target.side), true), {id:'marsh-' + target.id + '-' + state.action}, 1)[0];
       const poison = valueFromEffect(target.legacyEffect || target.effect, [/施加\s*(\d+)点剧毒/, /施加(\d+)点剧毒/], 6);
       if (enemy) applyPoison(target, enemy, poison, '沼泽鼠自身受到治疗后的被动');
     }
@@ -1770,7 +1923,7 @@
     if (!target || target.dead || !amount) return 0;
     const value = Math.max(0, Math.round(amount));
     target.regen += value;
-    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得再生 +' + value + '，当前 ' + target.regen + '。', 'trigger', 'STATUS');
+    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得再生 +' + logValue('heal', value) + '，当前 ' + logValue('heal', target.regen) + '。', 'trigger', 'STATUS');
     trace(target.name + ' 再生 +' + value, 'trigger');
     return value;
   }
@@ -1784,9 +1937,8 @@
     if (!target || target.dead) return;
     let value = Math.max(1, Math.round(amount || 0));
     const old = target.poison;
-    if (target.name === '蕈章' && target.shield > 0) value *= 2;
     target.poison += value;
-    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得剧毒 +' + value + '，当前 ' + target.poison + '。', 'trigger', 'POISON');
+    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得剧毒 +' + logValue('poison', value) + '，当前 ' + logValue('poison', target.poison) + '。', 'trigger', 'POISON');
     trace(target.name + ' 剧毒 +' + value, 'trigger');
     const blackRoses = [];
     if (source && source.name === '黑玫瑰' && !source.dead) blackRoses.push(source);
@@ -1813,16 +1965,16 @@
     const value = Math.max(1, Math.round(amount || 0));
     const old = target.frost;
     target.frost += value;
-    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得霜冻 +' + value + '，当前 ' + target.frost + '。', 'trigger', 'FROST');
+    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得霜冻 +' + logValue('frost', value) + '，当前 ' + logValue('frost', target.frost) + '。', 'trigger', 'FROST');
     trace(target.name + ' 霜冻 +' + value, 'trigger');
     if (old > 0) {
       const defenseBefore = Math.max(0, target.def);
       const shieldBefore = Math.max(0, target.shield);
-      const defenseLoss = Math.floor(value / 2);
+      const defenseLoss = Math.ceil(value / 2);
       const shieldLoss = value * 3;
       target.def = Math.max(0, target.def - defenseLoss);
       target.shield = Math.max(0, target.shield - shieldLoss);
-      log('<strong>' + esc(target.name) + '</strong> 已有霜冻，覆雪额外削减防御 ' + defenseLoss + '（' + defenseBefore + ' → ' + target.def + '），护盾 ' + shieldLoss + '（' + shieldBefore + ' → ' + target.shield + '）。', 'warn', 'FROST PROC');
+      log('<strong>' + esc(target.name) + '</strong> 已有霜冻，覆雪额外削减防御 ' + defenseLoss + '（' + defenseBefore + ' → ' + target.def + '），护盾 ' + logValue('shield', shieldLoss) + '（' + shieldBefore + ' → ' + target.shield + '）。', 'warn', 'FROST PROC');
       trace(target.name + ' 霜冻削防/护盾', 'trigger');
     }
   }
@@ -1832,16 +1984,17 @@
     const value = Math.max(1, Math.round(amount || 0));
     const old = target.burn;
     target.burn += value;
-    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得灼烧 +' + value + '，当前 ' + target.burn + '。', 'trigger', 'BURN');
+    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得灼烧 +' + logValue('burn', value) + '，当前 ' + logValue('burn', target.burn) + '。', 'trigger', 'BURN');
     trace(target.name + ' 灼烧 +' + value, 'trigger');
     if (old > 0) {
       damageUnit(source, target, value * 2, {status:'点燃', meta:'IGNITE PROC'});
-      log('目标已有灼烧，点燃额外造成 ' + value * 2 + ' 点伤害。', 'output', 'IGNITE PROC');
+      log('目标已有灼烧，点燃额外造成 ' + logValue('burn', value * 2) + ' 点伤害。', 'output', 'IGNITE PROC');
     }
     const crab = source && source.name === '花椒蟹' && !source.dead ? source : null;
     if (crab && attackHit && target.hp > 0) {
-      damageUnit(crab, target, 1, {status:'被动', ignoreDefense:false, meta:'FLOWER CRAB'});
-      log('花椒蟹被动：技能赋予灼烧后，对同一目标造成1点额外伤害；该被动伤害不算白蔷薇的攻击触发。', 'trigger', 'PET PROC');
+      const extra = valueFromEffect(crab.effect, [/造成(\d+)点伤害/], 1);
+      damageUnit(crab, target, extra, {status:'被动', ignoreDefense:false, meta:'FLOWER CRAB'});
+      log('花椒蟹被动：技能赋予灼烧后，对同一目标造成' + extra + '点额外伤害；该被动伤害不算白蔷薇的攻击触发。', 'trigger', 'PET PROC');
     }
     if (source && source.side && source.hp > 0) {
       skillList(source.side).filter(skill => skill.owner === source.id && skill.name === '火中取栗').forEach(skill => reduceCountdown(skill, 1, '装备灵宠触发点燃后'));
@@ -1853,7 +2006,7 @@
     const burnDamage = target.burn;
     damageUnit(attacker, target, burnDamage, {status:'灼烧', meta:'BURN PROC'});
     target.burn = Math.max(1, Math.floor(target.burn * 0.9));
-    log('<strong>' + esc(target.name) + '</strong> 被攻击技能命中，灼烧追加 ' + burnDamage + '，层数按10%衰减至 ' + target.burn + '。', 'trigger', 'BURN PROC');
+    log('<strong>' + esc(target.name) + '</strong> 被攻击技能命中，灼烧追加 ' + logValue('burn', burnDamage) + '，层数按10%衰减至 ' + logValue('burn', target.burn) + '。', 'trigger', 'BURN PROC');
     if (attacker && attacker.name === '白蔷薇') {
       const heal = valueFromEffect(attacker.effect, [/治疗(\d+)点生命/], 7);
       healRandomAlly(attacker, heal, '白蔷薇自身攻击触发灼烧伤害');
@@ -1871,15 +2024,15 @@
       target.excited -= 1;
     }
     target.shield += value;
-    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得护盾 <strong>+' + value + '</strong>。', 'trigger', 'SHIELD');
+    log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得护盾 ' + logValue('shield', '+' + value) + '。', 'trigger', 'SHIELD');
     trace(target.name + ' 护盾 +' + value, 'trigger');
     if (target.name === '鲛人抢手' && value > 0) {
-      const skill = skillList(target.side).find(item => item.owner === target.id && !isPassiveSkill(item));
+      const skill = pseudoRandomTargets(skillList(target.side).filter(item => item.owner === target.id && !isPassiveSkill(item)), {id:'shark-gunner-' + target.id + '-' + state.action}, 1)[0];
       const growth = valueFromEffect(target.legacyEffect || target.effect, [/技能伤害提升(\d+)点/], 10);
       if (skill) addSkillGrowth(skill, 'damageBonus', growth, '鲛人抢手获得护盾后的技能成长');
     }
     if (target.name === '巨伞蕈' && value > 0) {
-      const allies = unitsOf(target.side, true).filter(unit => unit.id !== target.id).slice(0, 2);
+      const allies = pseudoRandomTargets(unitsOf(target.side, true).filter(unit => unit.id !== target.id), {id:'umbrella-' + target.id + '-' + state.action}, 2);
       allies.forEach(ally => applyShield(target, ally, value, '巨伞蕈护盾联动'));
       if (allies.length) log('巨伞蕈护盾联动：为 ' + allies.map(ally => esc(ally.name)).join('、') + ' 各提供等量护盾。', 'trigger', 'PET PROC');
     }
@@ -1931,10 +2084,13 @@
   function criticalChance(skill, owner) {
     const abilityChance = valueFromEffect(skill && (skill.ability + ' ' + skill.effect), [/暴击率\s*(\d+)%/], 0);
     const petChance = owner && owner.critBonus ? owner.critBonus : 0;
+    const witnessChance = owner ? unitsOf(owner.side, true)
+      .filter(unit => unit.name === '见闻兽')
+      .reduce((sum, unit) => sum + valueFromEffect(unit.effect, [/暴击率\+(\d+)%/], 10), 0) : 0;
     const list = owner ? skillList(owner.side) : [];
     const index = list.indexOf(skill);
     const focusBonus = index >= 0 && list.some((item, itemIndex) => item.name === '专注' && Math.abs(itemIndex - index) === 1) ? 10 : 0;
-    return Math.min(100, abilityChance + petChance + focusBonus + (skill && skill.critBonus || 0));
+    return Math.min(100, abilityChance + petChance + witnessChance + focusBonus + (skill && skill.critBonus || 0));
   }
 
   function triggerCritical(owner, skill, targets) {
@@ -1973,6 +2129,11 @@
         const amount = valueFromEffect(item.effect, [/护盾值上升(\d+)/], 5);
         addSkillGrowth(item, 'shieldBonus', amount, '其它武技使用后护盾成长');
       });
+      if (owner.name === '泥沼妖') {
+        const amount = valueFromEffect(owner.effect, [/提供(\d+)点护盾/], 5);
+        const target = pseudoRandomTargets(unitsOf(side, true), {id:'mud-' + owner.id + '-' + skill.id}, 1)[0];
+        if (target) applyShield(owner, target, amount, '泥沼妖使用武技后');
+      }
     }
     skillList(side).filter(item => item.name === '凌厉').forEach(item => {
       addSkillGrowth(item, 'critBonus', 10, '友方行动后的暴击率成长');
@@ -1982,17 +2143,29 @@
     }
   }
 
+  function triggerSharkCopy(owner, skill, side, options) {
+    if (!owner || !skill || (options && options.sharkCopy)) return;
+    const bar = skillList(side);
+    const copied = state.round % 2 === 1 ? bar[0] : bar[bar.length - 1];
+    if (!copied || copied.id !== skill.id || owner.name === '乌角鲨') return;
+    unitsOf(side, true).filter(unit => unit.name === '乌角鲨').forEach(shark => {
+      log('<strong>乌角鲨</strong> 触发：' + sideLabel(side) + '本回合' + (state.round % 2 === 1 ? '最前' : '最后') + '技能已由原灵宠使用完毕，乌角鲨立即再使用 <strong>' + esc(skill.name) + '</strong>。', 'trigger', 'PET PROC');
+      useSkill(skill, side, {ownerOverride: shark, sharkCopy: true});
+    });
+  }
+
   function genericAttackValue(skill, owner, kind) {
     return primaryValueBreakdown(skill, owner, kind || 'damage').value;
   }
 
   function useSkill(skill, side, options) {
     const immediateUse = !!(options && options.immediateUse);
+    const ownerOverride = options && options.ownerOverride;
     state.action += 1;
     state.trace = [];
     state.selectedSkill = skill;
-    state.selectedId = skill.owner;
-    const owner = ownerOf(skill);
+    const owner = ownerOverride || ownerOf(skill);
+    state.selectedId = owner ? owner.id : skill.owner;
     const label = sideLabel(side) + '技能 ' + skill.name;
     setBanner(skill.name, (owner ? owner.name : '未分配') + ' · Step ' + state.action);
     if (!owner || owner.dead || owner.hp <= 0) {
@@ -2025,6 +2198,27 @@
     }
     let countdownAdvanced = false;
     if (!targets.length && (skill.rangeConfig || !skillIsSupport(skill)) && skill.name !== '轻击') {
+      const missCharge = parseFirst(skill.legacyEffect, [/充能\s*(\d+)/], 0);
+      const triggersOnMiss = /未命中也会触发/.test(skill.legacyEffect || '');
+      if (triggersOnMiss && missCharge) {
+        if (skill.ammoMax && skill.ammo <= 0) {
+          log('<strong>' + esc(skill.name) + '</strong> 弹药为0，无法使用。', 'warn', 'AMMO');
+          renderAll();
+          return;
+        }
+        if (skill.ammoMax) {
+          skill.ammo -= 1;
+          log('<strong>' + esc(skill.name) + '</strong> 无目标，仍按技能原文触发充能；消耗1枚弹药，剩余 ' + skill.ammo + '。', 'trigger', 'AMMO');
+        } else {
+          log('<strong>' + esc(skill.name) + '</strong> 无目标，但按技能原文“未命中也会触发”。', 'trigger', 'TARGET');
+        }
+        addEnergy(owner, missCharge, skill.name + '未命中充能');
+        skill.used += 1;
+        owner.skillUses += 1;
+        trace(skill.name + ' 未命中仍充能' + missCharge, 'trigger');
+        renderAll();
+        return;
+      }
       if (skill.baseCountdown && skill.countdown > 0 && !immediateUse) {
         advanceCountdown(skill);
         countdownAdvanced = true;
@@ -2095,6 +2289,8 @@
         if (skill.explosionTailOnly) countdownEffectReady = explosion;
       }
     }
+    const shellSkill = /破壳/.test(skill.effect + ' ' + skill.legacyEffect);
+    const shellAttackReady = !shellSkill || (countdownEffectReady && !countdownAdvanced && !immediateUse);
     const regularEffectReady = countdownEffectReady || (!skill.countdownTailOnly && (!skill.explosionTailOnly || explosion));
     const multi = parseFirst(skill.legacyEffect, [/多重触发\s*(\d+)/], 1);
     const valueTargets = targets.length ? targets : [owner];
@@ -2112,6 +2308,16 @@
       owner.skillUses += 1;
       renderAll();
       return;
+    }
+
+    if (shellSkill) {
+      skill.breakShellBonus = shellAttackReady ? owner.shield * 2 : 0;
+      if (shellAttackReady) {
+        const lostShield = owner.shield;
+        owner.shield = 0;
+        log('<strong>' + esc(skill.name) + '</strong> 破壳：移除 ' + logValue('shield', lostShield) + ' 点当前护盾，本次攻击附加 ' + logValue('damage', skill.breakShellBonus) + ' 点伤害。', 'trigger', 'BREAKSHELL');
+        trace(skill.name + ' 破壳护盾 -' + lostShield, 'trigger');
+      }
     }
 
     if (charge && !skill.legacyChargeBeforeSimpleGate) addEnergy(owner, charge, skill.name + '技能');
@@ -2158,7 +2364,9 @@
     const frostSkill = /覆雪|结霜/.test(skill.name + ' ' + skill.ability) && regularEffectReady;
     const frostValue = valueEntriesOf(skill).find(entry => entry.kind === 'frost');
     const directDamage = valueEntriesOf(skill).some(entry => entry.kind === 'damage') || /造成伤害/.test(skill.legacyEffect);
-    const critical = attackSkill && regularEffectReady ? triggerCritical(owner, skill, targets) : false;
+    const directDamageForUse = directDamage && shellAttackReady;
+    const attackEffectReady = attackSkill && regularEffectReady && shellAttackReady;
+    const critical = attackEffectReady ? triggerCritical(owner, skill, targets) : false;
     const directTargets = targets.length ? targets : [owner];
     const damageTargets = targetsForEffectScope(skill, owner, directTargets, ['造成伤害', '发起攻击', '攻击']);
     const burnTargets = burnSkill ? targetsForEffectScope(skill, owner, directTargets, ['点燃', '灼烧']) : [];
@@ -2171,7 +2379,13 @@
     const frostTargetIds = new Set(frostTargets.map(target => target.id));
     effectTargets.forEach(target => {
       if (!regularEffectReady) return;
-      if (attackSkill && damageTargetIds.has(target.id) && !target.dead && target.side !== owner.side) triggerBurnOnHit(owner, target, skill, genericAttackValue(skill, owner, 'damage'));
+      const triggerCount = Math.max(1, multi);
+      if (!directDamageForUse && attackEffectReady && damageTargetIds.has(target.id) && !target.dead) {
+        for (let hit = 0; hit < triggerCount; hit += 1) {
+          if (target.dead || target.hp <= 0) break;
+          if (target.side !== owner.side) triggerBurnOnHit(owner, target, skill, genericAttackValue(skill, owner, 'damage'));
+        }
+      }
       if (burnTargetIds.has(target.id)) {
         const burn = genericAttackValue(skill, owner, 'burn');
         for (let hit = 0; hit < Math.max(1, multi); hit += 1) applyBurn(owner, target, burn, skill.name + '点燃', owner.name === '花椒蟹');
@@ -2182,13 +2396,18 @@
       if (frostTargetIds.has(target.id) && frostValue && attackSkill && target.hp > 0) {
         applyFrost(owner, target, valueBreakdown(skill, owner, frostValue).value, skill.name + '覆雪');
       }
-      if (damageTargetIds.has(target.id) && directDamage && attackSkill && target.hp > 0 && regularEffectReady) {
+      if (damageTargetIds.has(target.id) && directDamageForUse && attackEffectReady && target.hp > 0 && regularEffectReady) {
         for (let i = 0; i < multi; i += 1) {
+          if (target.dead || target.hp <= 0) break;
+          if (target.side !== owner.side) triggerBurnOnHit(owner, target, skill, genericAttackValue(skill, owner, 'damage'));
           let value = genericAttackValue(skill, owner, 'damage');
-          if (owner.name === '饿狼' && owner.firstMartialReady && /武技|攻击/.test(skill.type + skill.tags)) {
+          const wolfAnySkill = owner.name === '饿狼' && /第一个技能/.test(owner.effect || '');
+          const wolfCanDouble = owner.name === '饿狼' && (wolfAnySkill ? owner.firstSkillReady : owner.firstMartialReady) && (wolfAnySkill || /武技/.test(skill.type + skill.tags));
+          if (wolfCanDouble) {
             value *= 2;
-            owner.firstMartialReady = false;
-            log('饿狼本回合第一个武技技能伤害翻倍。', 'trigger', 'PET PROC');
+            if (wolfAnySkill) owner.firstSkillReady = false;
+            else owner.firstMartialReady = false;
+            log('饿狼本回合第一个' + (wolfAnySkill ? '技能' : '武技技能') + '伤害翻倍。', 'trigger', 'PET PROC');
           }
           damageUnit(owner, target, value, {attackHit:true, meta:'ATTACK'});
           if (/雷电牙|镇雷/.test(skill.name)) applyParalyze(owner, target, 1, skill.name + '命中');
@@ -2201,7 +2420,7 @@
         resolveDisplacement(skill, owner, target, mode, genericAttackValue(skill, owner, 'damage'));
       });
     }
-    if (regularEffectReady) triggerPassiveAttacks(owner, skill, targets);
+    if (attackEffectReady) triggerPassiveAttacks(owner, skill, targets);
 
     if (skill.name === '火中取栗' && owner.hp > 0 && regularEffectReady) applyExcited(owner, owner, valueFromEffect(skill.effect, [/给予灵兽自身(\d+)层亢奋/], 2), '火中取栗');
     if (skill.name === '元气弹' && explosion && countdownEffectReady) {
@@ -2226,7 +2445,12 @@
     if (critical && skill.name === '凌厉') skill.critBonus = 0;
     if (owner.name === '黑犬' && skill.size === 'medium') {
       const strongest = unitsOf(side, true).slice().sort((a, b) => b.atk - a.atk)[0];
-      if (strongest) { applyBuff(strongest, 'atk', 2, '黑犬中篇技能联动'); strongest.def += 1; }
+      if (strongest) {
+        const attack = valueFromEffect(owner.effect, [/提升(\d+)点攻击/], 2);
+        const defense = valueFromEffect(owner.effect, [/和(\d+)防御/], 1);
+        applyBuff(strongest, 'atk', attack, '黑犬中篇技能联动');
+        applyBuff(strongest, 'def', defense, '黑犬中篇技能联动');
+      }
     }
     if (owner.name === '白蔷薇' && burnSkill && directTargets[0] && directTargets[0].side !== owner.side) {
       log('白蔷薇只有在自身攻击触发灼烧伤害时才会治疗，不会被友方或花椒蟹被动额外伤害误触发。', 'trigger', 'RULE NOTE');
@@ -2234,7 +2458,7 @@
     if (owner.name === '花椒蟹' && burnSkill) {
       log('花椒蟹自身施加灼烧也会按“技能赋予灼烧后”触发自身被动。', 'trigger', 'RULE NOTE');
     }
-    triggerPostSkill(owner, skill, side, attackSkill && regularEffectReady);
+    triggerPostSkill(owner, skill, side, attackEffectReady);
     if (resetAfterEffect && countdownEffectReady) {
       resetCountdown(skill, '倒计时段效果触发');
       if (skill.name === '火中取栗' && !skill.immediateUseGuard) {
@@ -2250,6 +2474,7 @@
     }
     skill.used += 1;
     owner.skillUses += 1;
+    triggerSharkCopy(owner, skill, side, options);
     renderAll();
     checkVictory();
   }
@@ -2270,10 +2495,15 @@
       if (unit.weak > 0) unit.weak = Math.max(0, unit.weak - 1);
       if (unit.paralyze > 0) unit.paralyze = Math.max(0, unit.paralyze - 1);
     });
-    unitsOf(side, true).filter(unit => unit.name === '玄铁龟').forEach(unit => addEnergy(unit, 1, '玄铁龟回合结束充能'));
-    if (unitsOf(side, true).some(unit => unit.name === '角蛙')) {
-      team(side).skillDamageGrowth = (team(side).skillDamageGrowth || 0) + 2;
-      log('角蛙回合结束被动：本方后续技能伤害 +2。', 'trigger', 'PET PASSIVE');
+    unitsOf(side, true).filter(unit => unit.name === '玄铁龟').forEach(unit => {
+      const amount = valueFromEffect(unit.effect, [/回合结束时充能(\d+)/], 2);
+      addEnergy(unit, amount, '玄铁龟回合结束充能');
+    });
+    const frog = unitsOf(side, true).find(unit => unit.name === '角蛙');
+    if (frog) {
+      const amount = valueFromEffect(frog.effect, [/技能伤害\+(\d+)/], 2);
+      team(side).skillDamageGrowth = (team(side).skillDamageGrowth || 0) + amount;
+      log('角蛙回合结束被动：本方后续技能伤害 +' + amount + '。', 'trigger', 'PET PASSIVE');
     }
     log('—— ' + sideLabel(side) + '回合结束效果结算完毕 ——', 'trigger', 'TURN END');
   }
@@ -2283,7 +2513,21 @@
     state.side = 'player';
     state.playerCursor = 0;
     state.trace = [];
-    startEffects('player');
+    if (!state.turnStartResolved) {
+      startEffects('player');
+      state.turnStartResolved = true;
+    }
+    if (pendingReviveFor('player')) {
+      state.phase = 'position';
+      state.auto = false;
+      state.running = false;
+      stopAuto();
+      state.selectedId = pendingReviveFor('player').unitId;
+      log('己方进入开始移动阶段，请先选择复活位置。', 'trigger', 'REVIVE');
+      renderAll();
+      return;
+    }
+    summarizePositionChanges('player');
     state.phase = 'resolving';
     log('己方完成部署，开始按技能栏从左到右结算。', 'trigger', 'PLAYER ACTION');
     renderAll();
@@ -2306,11 +2550,7 @@
         const candidate = [Math.max(0, Math.min(ROWS - 1, enemy.pos[0] + dr)), Math.max(0, Math.min(COLS - 1, enemy.pos[1] + dc))];
         const occupied = allUnits().some(unit => !unit.dead && unit.id !== enemy.id && unit.pos[0] === candidate[0] && unit.pos[1] === candidate[1]);
         if (!occupied) {
-          moveUnit(enemy, candidate, {
-            reason: '敌方AI移动',
-            meta: 'AI MOVE',
-            message: (old, next) => '<strong>' + esc(enemy.name) + '</strong> AI 向最近目标移动：' + coord(old) + ' → ' + coord(next) + '。'
-          });
+          moveUnit(enemy, candidate, {reason: '敌方AI移动'});
         }
       } else {
         log('<strong>' + esc(enemy.name) + '</strong> 选择技能 <strong>' + esc(skill.name) + '</strong>，目标按范围内最低生命值确定。', 'trigger', 'AI SELECT');
@@ -2324,9 +2564,13 @@
     state.enemyCursor = 0;
     state.trace = [];
     startEffects('enemy');
+    state.turnStartResolved = true;
     state.phase = 'enemy-position';
     log('—— 敌方自动走位阶段：按确定性 AI 选择最近目标 ——', 'trigger', 'AI TURN');
+    capturePositionSnapshot('enemy');
+    placeEnemyPendingRevives();
     moveEnemyAI();
+    summarizePositionChanges('enemy');
     state.phase = 'enemy-resolving';
     log('对手完成自动走位，开始按敌方技能栏顺序结算。', 'trigger', 'ENEMY ACTION');
     renderAll();
@@ -2345,10 +2589,15 @@
     if (state.winner) return;
     state.round += 1;
     state.side = 'player';
-    state.phase = 'position';
     state.playerCursor = 0;
     state.roundEvents = 0;
+    state.turnStartResolved = false;
+    capturePositionSnapshot('player');
+    capturePositionSnapshot('enemy');
     log('对手回合结束，进入第 ' + state.round + ' 回合。己方可以重新走位并调整技能顺序。', 'trigger', 'ROUND');
+    startEffects('player');
+    state.turnStartResolved = true;
+    state.phase = 'position';
     renderAll();
   }
 
@@ -2372,12 +2621,22 @@
     if (state.winner) return;
     if (state.phase === 'resolving') {
       const skill = state.playerSkills[state.playerCursor];
-      if (skill) useSkill(skill, 'player');
+      if (skill) {
+        const owner = ownerOf(skill);
+        if (owner && owner.name === '乌角鲨') {
+          log('<strong>乌角鲨</strong> 跳过自身装备的 <strong>' + esc(skill.name) + '</strong>，等待本回合指定技能触发复制。', 'trigger', 'PET PROC');
+        } else useSkill(skill, 'player');
+      }
       state.playerCursor += 1;
       if (state.playerCursor >= state.playerSkills.length) finishPlayerTurn();
     } else if (state.phase === 'enemy-resolving') {
       const skill = state.enemySkills[state.enemyCursor];
-      if (skill) useSkill(skill, 'enemy');
+      if (skill) {
+        const owner = ownerOf(skill);
+        if (owner && owner.name === '乌角鲨') {
+          log('<strong>乌角鲨</strong> 跳过自身装备的 <strong>' + esc(skill.name) + '</strong>，等待本回合指定技能触发复制。', 'trigger', 'PET PROC');
+        } else useSkill(skill, 'enemy');
+      }
       state.enemyCursor += 1;
       if (state.enemyCursor >= state.enemySkills.length) finishEnemyTurn();
     }
@@ -2444,6 +2703,12 @@
     if (winner) {
       winner.points = (winner.points || 0) + 1;
       winner.history += 1;
+      const witness = unitsOf(winnerSide, false).filter(unit => unit.name === '见闻兽').length;
+      if (witness) {
+        const experience = 1 + witness;
+        winner.experience = (winner.experience || 0) + experience;
+        log('<strong>见闻兽</strong> 胜利结算：' + sideLabel(winnerSide) + '额外获得 ' + experience + ' 点经验（见闻兽在场 +1，存活站场再 +1）。', 'trigger', 'PET PASSIVE');
+      }
     }
     if (loser) loser.history += 1;
     ['player', 'enemy'].forEach(side => {
@@ -2518,7 +2783,7 @@
   }
 
   function previewOwner(petItem) {
-    if (!petItem || !petItem.name) return {id:'preview-owner', side:'player', name:'未分配', quality:'—', atk:0, def:0, hp:0, maxHp:0, dead:false, energy:0, maxEnergy:12};
+    if (!petItem || !petItem.name) return {id:'preview-owner', side:'player', name:'未分配', quality:'—', atk:0, def:0, hp:0, maxHp:0, dead:false, energy:0, maxEnergy:Infinity};
     const cat = petCatalog(petItem && petItem.name);
     const quality = petItem && petItem.quality || cat.tier || '青铜';
     const scale = qualityScale(cat, quality);
@@ -2528,7 +2793,7 @@
     const effect = String(qualityField(cat, quality, '一句话效果', cat.effect) || '暂无简述');
     const abilityEnergyCost = parseFirst(effect, [/消耗\s*(\d+)\s*点能量/], 0);
     const abilityCountdownMax = parseFirst(effect, [/倒计时\s*(\d+)/], 0);
-    return {id:'preview-owner', side:'player', name:petItem && petItem.name || '未分配', quality, atk, def, hp, maxHp:hp, dead:false, energy:0, maxEnergy:12, effect, abilityEnergyCost, abilityCountdownMax, abilityCountdown:abilityCountdownMax};
+    return {id:'preview-owner', side:'player', name:petItem && petItem.name || '未分配', quality, atk, def, hp, maxHp:hp, dead:false, energy:0, maxEnergy:Infinity, effect, abilityEnergyCost, abilityCountdownMax, abilityCountdown:abilityCountdownMax};
   }
 
   function previewSkill(skillItem, owner) {
@@ -2590,6 +2855,16 @@
   function closeConfigInfo() {
     state.configInfo = null;
     const modal = $('#config-info-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function openGuide() {
+    const modal = $('#guide-modal');
+    if (modal) modal.hidden = false;
+  }
+
+  function closeGuide() {
+    const modal = $('#guide-modal');
     if (modal) modal.hidden = true;
   }
 
@@ -2701,6 +2976,10 @@
     }
     state.setupDraft.player.income -= cost;
     state.config.player.income = state.setupDraft.player.income;
+    if (kind === 'skill' && splitTags(skillCatalog(item.name).tags).includes('暗器')) {
+      state.setupDraft.player.darkArtifactPurchases = (Number(state.setupDraft.player.darkArtifactPurchases) || 0) + 1;
+      state.config.player.darkArtifactPurchases = state.setupDraft.player.darkArtifactPurchases;
+    }
     state.inventory[kind === 'skill' ? 'skills' : 'pets'].push(clone(item));
     state.shop[kind === 'skill' ? 'skills' : 'pets'][index] = null;
     log('战前购买 ' + item.name + '（' + cost + '金币），剩余金币 ' + state.config.player.income + '。', 'trigger', 'SHOP');
@@ -2807,6 +3086,7 @@
   $('#run-btn').addEventListener('click', startOrPause);
   $('#auto-btn').addEventListener('click', toggleAuto);
   $('#reset-btn').addEventListener('click', resetAll);
+  $('#guide-btn').addEventListener('click', openGuide);
   $('#config-btn').addEventListener('click', openSetup);
   $('#close-setup').addEventListener('click', closeSetup);
   $('#cancel-setup').addEventListener('click', closeSetup);
@@ -2828,10 +3108,15 @@
   $('#config-info-modal').addEventListener('click', event => {
     if (event.target.id === 'config-info-modal') closeConfigInfo();
   });
+  $('#close-guide').addEventListener('click', closeGuide);
+  $('#guide-modal').addEventListener('click', event => {
+    if (event.target.id === 'guide-modal') closeGuide();
+  });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       closeSkillInfo();
       closeConfigInfo();
+      closeGuide();
     }
   });
   $('#clear-log').addEventListener('click', () => {

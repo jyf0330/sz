@@ -17,8 +17,8 @@ const path = require('node:path');
     assert.equal(await page.locator('.team-preset-card').count(), 3);
     assert.equal(await page.locator('.team-preset-member').count(), 12);
     assert.equal(await page.locator('.team-preset-card [data-preset-battle-link]').count(), 3);
-    assert.match(await page.locator('.team-preset-card').nth(2).innerText(), /蓄力\s*图鉴名 蓄能/);
-    assert.match(await page.locator('.team-preset-card').nth(2).innerText(), /飞爪钩\s*图鉴名 飞抓钩/);
+    assert.match(await page.locator('.team-preset-card').nth(2).innerText(), /预充能白银/);
+    assert.match(await page.locator('.team-preset-card').nth(2).innerText(), /气甲白银/);
     await page.screenshot({path: path.join(root, 'verification/presets-atlas-desktop.png'), fullPage: true});
 
     await page.goto('file://' + path.join(root, 'battle.html'));
@@ -33,7 +33,7 @@ const path = require('node:path');
     assert.match(await page.locator('#setup-validation').innerText(), /10 \/ 10/);
 
     await page.locator('[data-action="apply-preset"][data-preset="fire-energy-team"][data-team="player"]').click();
-    assert.deepEqual(await player.locator('select[data-kind="skill"][data-field="name"]').evaluateAll(nodes => nodes.map(node => node.value)), ['火中取栗', '引火', '激昂', '飞抓钩', '妒火', '天火咒', '连抓', '蓄能', '轻击']);
+    assert.deepEqual(await player.locator('select[data-kind="skill"][data-field="name"]').evaluateAll(nodes => nodes.map(node => node.value)), ['火中取栗', '灵火', '预充能', '补气丹', '妒火', '天火咒', '乱抓', '轻击', '气甲']);
     const qualities = await player.locator('select[data-kind="skill"][data-field="quality"]').evaluateAll(nodes => nodes.map(node => node.value));
     assert.equal(qualities[6], '黄金');
     assert(qualities.every((quality, index) => index === 6 ? quality === '黄金' : quality === '白银'));
@@ -70,7 +70,7 @@ const path = require('node:path');
     await page.screenshot({path: path.join(root, 'verification/presets-editor-tags.png'), fullPage: true});
     assert.deepEqual(errors, []);
 
-    const result = {status: 'PASS', presets: 3, heroHp: 660, checks: ['图谱展示完整配队', '图谱跳转预载', '编队界面载入己方', '四灵宠与技能归属', '10格上限', '别名映射', '黄金连抓', '起步品质标签联动', '非起步品质标签只读', '手机无横向溢出'], pageErrors: errors};
+    const result = {status: 'PASS', presets: 3, heroHp: 660, checks: ['图谱展示完整配队', '图谱跳转预载', '编队界面载入己方', '四灵宠与技能归属', '10格上限', '编辑器新增技能与覆盖范围', '黄金乱抓', '起步品质标签联动', '非起步品质标签只读', '手机无横向溢出'], pageErrors: errors};
     fs.writeFileSync(path.join(root, 'verification/presets-results.json'), JSON.stringify(result, null, 2));
     console.log(result);
   } finally {
