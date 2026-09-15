@@ -5,6 +5,26 @@
   if (!atlas || !Array.isArray(atlas.items)) return;
 
   const clone = value => JSON.parse(JSON.stringify(value));
+  function normalizeSkillFields(fields) {
+    const target = fields || {};
+    const legacyPassive = target['主动/被动'] === '被动';
+    const active = target['主动效果'] == null
+      ? (legacyPassive ? '' : (target['效果'] || ''))
+      : (target['主动效果'] === '' && target['效果'] && !target['被动效果'] && !legacyPassive ? target['效果'] : target['主动效果']);
+    target['主动效果'] = active;
+    target['被动效果'] = target['被动效果'] == null ? (legacyPassive ? (target['效果'] || '') : '') : target['被动效果'];
+    // 保留旧字段供旧版页面与导出兼容；主动效果是旧“效果”栏的等价内容。
+    target['效果'] = active;
+    const hasFlag = target['弹药技能'] !== null && target['弹药技能'] !== undefined && target['弹药技能'] !== '';
+    const inferred = /(?:弹药|装填弹药)\s*\d+/.test(String(active));
+    const enabled = hasFlag
+      ? target['弹药技能'] === true || target['弹药技能'] === 'true' || target['弹药技能'] === '是' || target['弹药技能'] === '启用'
+      : inferred;
+    target['弹药技能'] = enabled;
+    const ammo = Number(target['弹药']);
+    target['弹药'] = enabled ? Math.max(1, Number.isFinite(ammo) && ammo > 0 ? ammo : 1) : 0;
+    return target;
+  }
   function syncItemTags(item) {
     const clean = clone(item);
     const variants = Array.isArray(clean.variants) ? clean.variants : [];
@@ -14,7 +34,9 @@
     clean.fields = {...(clean.fields || {}), '词条': tags};
     variants.forEach(variant => {
       variant.fields = {...(variant.fields || {}), '词条': tags};
+      if (clean.kind === '技能') normalizeSkillFields(variant.fields);
     });
+    if (clean.kind === '技能') normalizeSkillFields(clean.fields);
     clean.variants = variants;
     return clean;
   }
@@ -125,8 +147,12 @@
       '主动/被动': '主动',
       '能力': '',
       '防御': 0,
+      '弹药技能': false,
+      '弹药': 0,
       '射程/目标': '正前方第一个敌人',
       '攻击范围配置': defaultAttackRange(),
+      '主动效果': '',
+      '被动效果': '',
       '效果': '',
       '词条': '短篇，技能',
       '主要配合对象': '',
@@ -154,12 +180,13 @@
       item.name = (seed.name || '技能') + ' · 副本';
       item.tier = seed.tier || '青铜';
       item.fields = clone(seed.fields || baseFields);
+      normalizeSkillFields(item.fields);
       item.fields['技能名'] = item.name;
-      item.effect = seed.effect || item.fields['效果'] || '';
+      item.effect = seed.effect || item.fields['主动效果'] || item.fields['效果'] || '';
       item.variants = clone(seed.variants || item.variants).map(variant => ({
         ...variant,
         source: {sheet: '编辑器新增', row: '—'},
-        fields: {...variant.fields, '技能名': variant.tier === item.tier ? item.name : null}
+        fields: {...normalizeSkillFields(variant.fields), '技能名': variant.tier === item.tier ? item.name : null}
       }));
     }
     return syncItemTags(item);

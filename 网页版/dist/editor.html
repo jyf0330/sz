@@ -58,11 +58,13 @@
         <div id="quality-tabs" class="quality-tabs" role="tablist" aria-label="品质"></div>
         <label class="field full tag-field"><span>标签名称 <small id="tag-sync-note">修改后会同步到全部品质阶段</small></span><input name="词条" placeholder="生灵，召唤物，火焰"><div id="tag-preview" class="tag-preview"></div></label>
         <div id="skill-fields" class="form-grid kind-fields">
-          <label class="field"><span>能力</span><input name="能力" placeholder="例如：攻击12+"></label>
+          <label class="field active-skill-option"><span>能力（主动效果前置）</span><input name="能力" placeholder="例如：攻击12+"></label>
           <label class="field"><span>防御</span><input name="skill-defense" inputmode="decimal" placeholder="0"></label>
-          <label class="field full"><span>使用方式</span><select name="skill-activation"><option>主动</option><option>被动</option></select></label>
-          <label class="field full"><span>射程 / 目标摘要 <small>由下方配置自动生成</small></span><input name="射程/目标" readonly></label>
-          <section class="range-editor field full" aria-labelledby="range-editor-title">
+          <label class="field"><span>弹药技能</span><span class="check-field"><input type="checkbox" name="弹药技能"> 启用弹药</span></label>
+          <label class="field"><span>弹药数值</span><input name="skill-ammo" inputmode="numeric" type="number" min="1" max="99" placeholder="1"></label>
+          <label class="field full skill-type-field"><span>技能类型 <small>被动技能不会在技能栏主动使用；主动技能可同时拥有主动与被动效果</small></span><select name="skill-activation"><option value="主动">主动技能</option><option value="被动">被动技能</option></select></label>
+          <label class="field full active-skill-option"><span>射程 / 目标摘要 <small>由下方配置自动生成</small></span><input name="射程/目标" readonly></label>
+          <section class="range-editor field full active-skill-option" aria-labelledby="range-editor-title">
             <div class="range-editor-heading">
               <div><span id="range-editor-title">攻击范围</span><small>9 × 9 · 施法者固定在中央并面朝上方</small></div>
               <div class="range-actions"><button id="range-sync-previous" type="button">同步上一品质</button><button id="range-clear" type="button">清空</button><button id="range-fill" type="button">填满</button></div>
@@ -82,7 +84,8 @@
             <div id="range-grid" class="range-grid" role="grid" aria-label="9乘9攻击范围编辑器"></div>
             <p id="range-help" class="range-help">无条件技能：点击棋盘设置红色命中格。</p>
           </section>
-          <label class="field full"><span>效果 <small>可自由输入完整规则文本</small></span><textarea name="效果" rows="7" placeholder="主动输入技能效果、触发条件与限制"></textarea></label>
+          <label class="field full effect-channel-field active-skill-option"><span>主动效果 <small>能力会在战斗中作为技能主动能力显示；可继续输入完整规则</small></span><textarea name="主动效果" rows="7" placeholder="输入主动技能效果、爆能/倒计时与目标规则"></textarea></label>
+          <label class="field full effect-channel-field passive-channel-field"><span>被动效果 <small>可与主动效果同时存在，仅在对应触发时机结算</small></span><textarea name="被动效果" rows="7" placeholder="输入受到伤害、回合开始、使用其它技能等被动规则"></textarea></label>
           <label class="field"><span>定位</span><input name="定位" placeholder="例如：核心输出"></label>
         </div>
         <div id="pet-fields" class="form-grid kind-fields" hidden>
@@ -93,23 +96,36 @@
           <label class="field full"><span>效果 <small>可自由输入完整规则文本</small></span><textarea name="一句话效果" rows="6" placeholder="主动输入灵宠效果、触发条件与限制"></textarea></label>
           <label class="field full"><span>升级理由</span><textarea name="升级理由" rows="3" placeholder="说明不同品质的成长与设计意图"></textarea></label>
         </div>
-        <section class="simple-effect-builder field full" aria-labelledby="simple-effect-title">
+        <section id="simple-effect-builder" class="simple-effect-builder field full" data-simple-mode="active" aria-labelledby="simple-effect-title">
           <div class="simple-effect-heading">
-            <div><span id="simple-effect-title">简化效果编辑</span><small>组合常用触发与效果，再应用到当前条目的效果栏</small></div>
+            <div><span id="simple-effect-title">主动效果 · 简化编辑</span><small>组合常用触发与效果，再应用到主动效果栏</small></div>
             <button id="simple-effect-read" type="button">从效果栏读取</button>
           </div>
-          <fieldset class="simple-timings"><legend>触发时机（可多选）</legend>
+          <fieldset class="simple-timings"><legend>触发时机</legend>
             <label><input type="checkbox" name="simple-timing" value="战斗开始时">战斗开始时</label>
             <label><input type="checkbox" name="simple-timing" value="回合开始">回合开始</label>
             <label><input type="checkbox" name="simple-timing" value="回合结束">回合结束</label>
             <label><input type="checkbox" name="simple-timing" value="被攻击时">被攻击时</label>
             <label><input type="checkbox" name="simple-timing" value="使用时">使用时</label>
+            <label><input type="checkbox" name="simple-timing" value="战斗结束时">战斗结束时</label>
+            <label><input type="checkbox" name="simple-timing" value="使用自身携带其它技能时">使用自身携带其它技能时</label>
+            <label><input type="checkbox" name="simple-timing" value="使用任意技能时">使用任意技能时</label>
+            <label><input type="checkbox" name="simple-timing" value="造成伤害时">造成伤害时</label>
+            <label><input type="checkbox" name="simple-timing" value="受到伤害时">受到伤害时</label>
+            <label><input type="checkbox" name="simple-timing" value="失去护盾">失去护盾</label>
+            <label><input type="checkbox" name="simple-timing" value="生命值下降至以下时">生命值下降至以下时</label>
+            <label><input type="checkbox" name="simple-timing" value="战斗胜利时">战斗胜利时</label>
+            <label><input type="checkbox" name="simple-timing" value="弹药耗尽时">弹药耗尽时</label>
           </fieldset>
           <div class="simple-effect-controls">
             <label class="field"><span>作用对象</span><select id="simple-effect-scope"><option>对目标</option><option>对自身</option><option>对目标和自身</option><option>对我方全体</option><option>对敌方全体</option><option>左侧相邻技能</option><option>右侧相邻技能</option><option>灵兽自身技能</option><option>己方所有技能</option></select></label>
-            <label class="field"><span>泛用效果</span><select id="simple-effect-action"><option>充能</option><option>装填弹药</option><option>拖拽</option><option>击退</option><option>爆能</option><option>倒计时</option><option>多重触发</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>剧毒</option><option>霜冻</option><option>亢奋</option><option>衰弱</option></select></label>
+            <label class="field"><span>泛用效果</span><select id="simple-effect-action"><option>充能</option><option>装填弹药</option><option>拖拽</option><option>击退</option><option>爆能</option><option>倒计时</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>灼烧</option><option>剧毒</option><option>淬毒</option><option>霜冻</option><option>覆雪</option><option>亢奋</option><option>衰弱</option><option>攻击提升</option><option>攻击下降</option><option>防御提升</option><option>防御下降</option><option>伤害提升</option><option>暴击率提升</option><option>麻痹</option><option>封刃</option><option>禁足</option><option>能量</option><option>推进倒计时</option></select></label>
             <label class="field simple-value-field"><span>数值 X</span><input id="simple-effect-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
             <button id="simple-effect-add" type="button">加入所选时机</button>
+          </div>
+          <div class="simple-addon-controls">
+            <label class="field"><span>附加效果 <small>独立于泛用效果</small></span><select id="simple-addon"><option>无</option><option>多重触发</option><option>破壳</option></select></label>
+            <label class="field simple-addon-value-field" hidden><span>多重触发次数 X</span><input id="simple-addon-value" type="number" min="1" max="99" value="2" inputmode="numeric"></label>
           </div>
           <div id="simple-gate-options" class="simple-gate-options" hidden>
             <label class="field"><span>爆能 / 倒计时生效方式</span><select id="simple-gate-mode"><option>额外效果</option><option>应用于此技能</option></select></label>
@@ -121,6 +137,52 @@
           <div id="simple-effect-list" class="simple-effect-list" aria-live="polite"></div>
           <div class="simple-effect-actions"><button id="simple-effect-clear" type="button">清空草稿</button><button id="simple-effect-apply" type="button">应用到效果栏</button></div>
           <p id="simple-effect-help">应用只更新以【触发时机】开头的简化规则，并保留其它手写内容。</p>
+        </section>
+        <section id="simple-passive-effect-builder" class="simple-effect-builder field full" data-simple-mode="passive" aria-labelledby="simple-passive-effect-title" hidden>
+          <div class="simple-effect-heading">
+            <div><span id="simple-passive-effect-title">被动效果 · 简化编辑</span><small>组合被动触发与效果，再应用到被动效果栏</small></div>
+            <button id="simple-passive-effect-read" type="button">从被动效果读取</button>
+          </div>
+          <fieldset class="simple-timings"><legend>被动触发时机（可多选）</legend>
+            <label><input type="checkbox" name="simple-passive-timing" value="战斗开始时">战斗开始时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="回合开始">回合开始</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="回合结束">回合结束</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="被攻击时">被攻击时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="使用时">使用时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="战斗结束时">战斗结束时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="使用自身携带其它技能时">使用自身携带其它技能时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="使用任意技能时">使用任意技能时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="造成伤害时">造成伤害时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="受到伤害时">受到伤害时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="失去护盾">失去护盾</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="生命值低于（%）时">生命值低于（%）时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="战斗胜利时">战斗胜利时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="弹药耗尽时">弹药耗尽时</label>
+          </fieldset>
+          <div class="passive-rule-steps">
+            <label class="field"><span>触发来源</span><select id="simple-passive-trigger-source"><option>敌方</option><option>友方</option><option>自身</option><option>自身及友方</option><option>左侧相邻技能</option><option>右侧相邻技能</option><option>自身携带技能</option><option>友方所有技能</option></select></label>
+            <label class="field"><span>额外条件</span><select id="simple-passive-condition"><option value="无条件">无条件</option><option value="爆能">爆能X</option><option value="倒计时">倒计时X</option><option value="剩余弹药">是否剩余弹药</option><option value="消耗弹药">消耗弹药X</option><option value="每拥有能量弹药">每拥有X点能量/弹药</option></select></label>
+            <label class="field simple-condition-value-field"><span>条件数值 X</span><input id="simple-passive-condition-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
+            <label class="field"><span>生效效果</span><select id="simple-passive-effect-action"><option>充能</option><option>装填弹药</option><option>拖拽</option><option>击退</option><option>爆能</option><option>倒计时</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>灼烧</option><option>剧毒</option><option>淬毒</option><option>霜冻</option><option>覆雪</option><option>亢奋</option><option>衰弱</option><option>攻击提升</option><option>攻击下降</option><option>防御提升</option><option>防御下降</option><option>伤害提升</option><option>暴击率提升</option><option>麻痹</option><option>封刃</option><option>禁足</option><option>能量</option><option>推进倒计时</option></select></label>
+            <label class="field"><span>作用目标</span><select id="simple-passive-effect-scope"><option>对目标</option><option>对自身</option><option>对目标和自身</option><option>对我方全体</option><option>对敌方全体</option><option>左侧相邻技能</option><option>右侧相邻技能</option><option>灵兽自身技能</option><option>己方所有技能</option></select></label>
+            <label class="field simple-value-field"><span>效果数值 X</span><input id="simple-passive-effect-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
+            <label class="field threshold-value-field" hidden><span>生命百分比 %</span><input id="simple-passive-threshold" type="number" min="1" max="99" value="50" inputmode="numeric"></label>
+            <button id="simple-passive-effect-add" type="button">加入被动规则</button>
+          </div>
+          <div class="simple-addon-controls">
+            <label class="field"><span>附加效果 <small>独立于生效效果</small></span><select id="simple-passive-addon"><option>无</option><option>多重触发</option><option>破壳</option></select></label>
+            <label class="field simple-addon-value-field" hidden><span>多重触发次数 X</span><input id="simple-passive-addon-value" type="number" min="1" max="99" value="2" inputmode="numeric"></label>
+          </div>
+          <div id="simple-passive-gate-options" class="simple-gate-options" hidden>
+            <label class="field"><span>爆能 / 倒计时生效方式</span><select id="simple-passive-gate-mode"><option>额外效果</option><option>应用于此技能</option></select></label>
+            <div id="simple-passive-extra-controls" class="simple-extra-controls">
+              <label class="field"><span>额外泛用效果</span><select id="simple-passive-extra-action"><option>充能</option><option>装填弹药</option><option>拖拽</option><option>击退</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>剧毒</option><option>霜冻</option><option>亢奋</option><option>衰弱</option></select></label>
+              <label class="field simple-value-field"><span>额外数值 X</span><input id="simple-passive-extra-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
+            </div>
+          </div>
+          <div id="simple-passive-effect-list" class="simple-effect-list" aria-live="polite"></div>
+          <div class="simple-effect-actions"><button id="simple-passive-effect-clear" type="button">清空草稿</button><button id="simple-passive-effect-apply" type="button">应用到被动效果栏</button></div>
+          <p id="simple-passive-effect-help">被动效果按手写内容为最终依据；简化规则会保留在被动效果栏中。</p>
         </section>
         <div class="form-grid common-details">
           <label class="field full"><span>主要配合对象</span><input name="主要配合对象" placeholder="可选"></label>
