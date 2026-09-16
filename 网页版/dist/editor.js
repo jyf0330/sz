@@ -10,16 +10,21 @@
   const RANGE_CENTER = [4, 4];
   const targetSides = ['敌方', '友方', '自身', '自身与友方', '自身与敌方'];
   const rangeConditions = ['生命最低', '生命最高', '攻击最高', '防御最低', '防御最高', '最前方', '最后方', '带有点燃', '带有剧毒', '带有霜冻', '带有护盾', '随机1个目标', '随机2个目标', '随机3个目标'];
-  const simpleTimings = ['战斗开始时', '回合开始', '回合结束', '被攻击时', '使用时', '战斗结束时', '使用自身携带其它技能时', '使用任意技能时', '造成伤害时', '受到伤害时', '失去护盾', '生命值低于（%）时', '生命值下降至以下时', '战斗胜利时', '弹药耗尽时'];
-  const passiveTriggerSources = ['敌方', '友方', '自身', '自身及友方', '左侧相邻技能', '右侧相邻技能', '自身携带技能', '友方所有技能'];
+  const passiveCauseReasons = ['伤害', '点燃', '灼烧', '淬毒', '剧毒', '覆雪', '霜冻', '治疗', '护盾', '再生', '能量增加', '能量减少', '亢奋', '衰弱', '麻痹', '禁足', '封刃', '装填弹药', '伤害提升', '暴击提升', '防御提升', '攻击提升', '点燃提升', '淬毒提升', '覆雪提升', '护盾提升', '再生提升', '治疗提升', '伤害降低', '暴击降低', '防御降低', '攻击降低', '点燃降低', '淬毒降低', '覆雪降低', '护盾降低', '再生降低', '治疗降低'];
+  const passiveTriggerEvents = ['技能触发暴击时', '触发目标灼烧伤害时', '触发霜冻伤害时', '触发剧毒伤害时'];
+  const passiveChainModes = ['受到', '造成', '触发'];
+  const passiveChainTimings = ['受到', '造成'].flatMap(mode => passiveCauseReasons.map(reason => `${mode}${reason}时`)).concat(passiveTriggerEvents);
+  const simpleTimings = ['战斗开始时', '回合开始', '回合结束', '被攻击时', '使用时', '战斗结束时', '使用自身携带的其它技能时', '使用任意技能时', '使用左侧相邻技能时', '使用右侧相邻技能时', '使用两侧相邻技能时', '失去护盾', '生命值低于（%）时', '生命值下降至以下时', '战斗胜利时', '弹药耗尽时', ...passiveChainTimings];
+  const passiveTriggerSources = ['敌方', '友方', '自身', '自身及友方', '左侧相邻技能', '右侧相邻技能', '左右两侧相邻技能', '自身携带技能', '友方所有技能'];
   const simpleConditions = ['无条件', '爆能', '倒计时', '剩余弹药', '消耗弹药', '每拥有能量弹药'];
-  const simpleScopes = ['对目标', '对自身', '对目标和自身', '对我方全体', '对敌方全体', '左侧相邻技能', '右侧相邻技能', '灵兽自身技能', '己方所有技能'];
-  const simpleSkillScopes = new Set(['左侧相邻技能', '右侧相邻技能', '灵兽自身技能', '己方所有技能']);
-  const simpleActions = ['充能', '装填弹药', '拖拽', '击退', '爆能', '倒计时', '伤害', '治疗', '护盾', '再生', '点燃', '灼烧', '剧毒', '淬毒', '霜冻', '覆雪', '亢奋', '衰弱', '攻击提升', '攻击下降', '防御提升', '防御下降', '伤害提升', '暴击率提升', '麻痹', '封刃', '禁足', '能量', '推进倒计时'];
+  const simpleScopes = ['对目标', '技能同一目标', '对自身', '对目标和自身', '对我方全体', '对敌方全体', '左侧相邻技能', '右侧相邻技能', '左右两侧相邻技能', '灵兽自身技能', '己方所有技能'];
+  const simpleSkillScopes = new Set(['左侧相邻技能', '右侧相邻技能', '左右两侧相邻技能', '灵兽自身技能', '己方所有技能']);
+  const simpleActions = ['充能', '装填弹药', '爆能', '倒计时', '伤害', '伤害+', '攻击+', '治疗', '护盾', '再生', '点燃', '点燃+', '灼烧', '剧毒', '淬毒', '淬毒+', '霜冻', '覆雪', '覆雪+', '亢奋', '衰弱', '攻击提升', '攻击下降', '防御提升', '防御下降', '伤害提升', '点燃提升', '淬毒提升', '覆雪提升', '护盾提升', '再生提升', '治疗提升', '暴击率提升', '麻痹', '封刃', '禁足', '能量', '推进倒计时'];
+  const inheritedTargetTimings = new Set(['使用任意技能时', '使用左侧相邻技能时', '使用右侧相邻技能时', '使用两侧相邻技能时', '使用自身携带的其它技能时']);
   const simpleExtraActions = simpleActions.filter(action => !['爆能', '倒计时'].includes(action));
-  const simpleAddons = ['无', '多重触发', '破壳'];
+  const simpleAddons = ['多重触发', '破壳', '暴击率', '击退', '拖拽'];
   const simpleGates = new Set(['爆能', '倒计时']);
-  const simpleModifiers = new Set(['爆能', '倒计时', '多重触发']);
+  const simpleModifiers = new Set(['爆能', '倒计时']);
   const sharedBindings = [
     {field: '主要配合对象', input: '主要配合对象'},
     {field: '套路', input: '套路'},
@@ -54,6 +59,7 @@
   let rangeStructured = false;
   let simpleDraft = [];
   let simpleDraftPassive = [];
+  let simpleActiveAddons = [];
   let simpleBuilderKey = '';
   let toastTimer;
 
@@ -327,6 +333,26 @@
     showToast(`已将${previousTier}品质的射程同步到${quality}`);
   }
 
+  function copyPreviousEffect(mode) {
+    const item = selectedItem();
+    const qualityIndex = qualities.indexOf(quality);
+    if (!item || item.kind !== '技能' || qualityIndex <= 0) return;
+    captureForm();
+    const previousTier = qualities[qualityIndex - 1];
+    const previousVariant = (item.variants || []).find(entry => entry.tier === previousTier);
+    if (!previousVariant) {
+      showToast(`没有找到${previousTier}品质的效果`, 'error');
+      return;
+    }
+    const field = effectFieldFor(item, mode);
+    const textarea = $('#item-form').elements[field];
+    textarea.value = mode === 'passive' ? skillPassiveEffect(previousVariant.fields) : skillActiveEffect(previousVariant.fields);
+    loadSimpleEffectBuilder(mode);
+    markDirty();
+    renderPreview();
+    showToast(`已将${previousTier}品质的${mode === 'passive' ? '被动' : '主动'}效果复制到${quality}`);
+  }
+
   function selectedItem() {
     return draft && draft.id === selectedId ? draft : items.find(item => item.id === selectedId) || items[0];
   }
@@ -361,8 +387,39 @@
     return ({弹药: '装填弹药', 填充弹药: '装填弹药', 灼烧: '点燃', 淬毒: '剧毒', 覆雪: '霜冻', 能量: '充能'})[action] || action;
   }
 
+  function parseSimpleAddons(text) {
+    return String(text || '').split(/[、，,]/).map(part => part.trim()).filter(Boolean).map(part => {
+      const valued = part.match(/^(多重触发|暴击率)\s*(\d+)?%?$/);
+      if (valued) return {type: valued[1], value: valued[1] === '暴击率' ? Math.max(0, Math.min(100, Number(valued[2]) || 0)) : Math.max(1, Math.min(99, Number(valued[2]) || 2))};
+      return simpleAddons.includes(part) ? {type: part, value: 0} : null;
+    }).filter(Boolean).filter((addon, index, all) => all.findIndex(item => item.type === addon.type) === index);
+  }
+
+  function normalizedRuleAddons(rule) {
+    if (Array.isArray(rule && rule.addons)) return rule.addons;
+    if (rule && rule.addon && rule.addon !== '无') return [{type: rule.addon, value: Number(rule.addonValue) || 0}];
+    return [];
+  }
+
+  function simpleAddonText(addons) {
+    return (addons || []).map(addon => addon.type === '多重触发'
+      ? `多重触发${Math.max(1, Number(addon.value) || 2)}`
+      : addon.type === '暴击率'
+        ? `暴击率${Math.max(0, Math.min(100, Number(addon.value) || 0))}%`
+        : addon.type).join('、');
+  }
+
+  function activeAddonPattern() {
+    return /【主动附加[：:=]([^】]+)】\s*/g;
+  }
+
+  function parseActiveAddons(text) {
+    const match = String(text || '').match(/【主动附加[：:=]([^】]+)】/);
+    return parseSimpleAddons(match && match[1]);
+  }
+
   function simpleRulePattern() {
-    const timings = ['生命值(?:低于|下降至)[^】]*时', '战斗开始时', '回合开始', '回合结束', '被攻击时', '使用时', '战斗结束时', '使用自身携带其它技能时', '使用任意技能时', '造成伤害时', '受到伤害时', '失去护盾', '战斗胜利时', '弹药耗尽时'];
+    const timings = ['生命值(?:低于|下降至)[^】]*时', ...simpleTimings.filter(item => !/^生命值/.test(item)).sort((a, b) => b.length - a.length)];
     const timing = timings.map((item, index) => index === 0 ? item : escapeRegExp(item)).join('|');
     const scope = simpleScopes.map(escapeRegExp).join('|');
     return new RegExp(`(?:【(?:触发来源|来源)[：:=]([^】]+)】)?【(${timing})】(?:【额外条件[：:=]([^】]+)】)?(?:【(${scope})】|(${scope}))：([^。\\n]+)。?`, 'g');
@@ -377,6 +434,7 @@
     const threshold = raw.match(/^生命值(?:低于|下降至)\s*[（(]?(\d+(?:\.\d+)?)%?[）)]?\s*(?:时|以下时)?$/);
     if (threshold) return {timing: '生命值低于（%）时', threshold: Math.max(1, Math.min(99, Number(threshold[1]) || 50))};
     if (raw === '生命值下降至以下时') return {timing: '生命值低于（%）时', threshold: 50};
+    if (raw === '使用自身携带其它技能时') return {timing: '使用自身携带的其它技能时'};
     if (raw === '回合开始时') return {timing: '回合开始'};
     if (raw === '回合结束时') return {timing: '回合结束'};
     return {timing: raw};
@@ -392,9 +450,8 @@
   }
 
   function parseSimpleAction(part) {
-    const addonMatch = String(part || '').match(/\s*〔附加：(多重触发|破壳)\s*(\d+)?〕\s*$/);
-    const addon = addonMatch ? addonMatch[1] : '无';
-    const addonValue = addon === '多重触发' ? Math.max(1, Number(addonMatch && addonMatch[2]) || 2) : 0;
+    const addonMatch = String(part || '').match(/\s*〔附加：([^〕]+)〕\s*$/);
+    const addons = parseSimpleAddons(addonMatch && addonMatch[1]);
     const source = addonMatch ? String(part).slice(0, addonMatch.index).trim() : String(part || '').trim();
     const gate = source.match(/^(爆能|倒计时)\s*(\d+)?(?:[（(](额外效果|应用于此技能)(?:[：:](?:施加)?(充能|弹药|装填弹药|拖拽|击退|伤害|治疗|护盾|再生|点燃|剧毒|霜冻|亢奋|衰弱)\s*(\d+)?)?[）)])?$/);
     if (gate) {
@@ -405,14 +462,14 @@
         gateMode: gate[3] || '',
         extraAction,
         extraValue: extraAction && simpleActionNeedsValue(extraAction) ? Math.max(1, Number(gate[5]) || 1) : 0,
-        addon,
-        addonValue
+        addons
       };
     }
-    const match = source.match(/^(?:施加)?(充能|能量|弹药|装填弹药|拖拽|击退|爆能|倒计时|多重触发|伤害|治疗|护盾|再生|点燃|灼烧|剧毒|淬毒|霜冻|覆雪|亢奋|衰弱|攻击提升|攻击下降|防御提升|防御下降|伤害提升|暴击率提升|麻痹|封刃|禁足|推进倒计时)\s*(\d+)?$/);
+    const match = source.match(/^(?:施加)?(充能|能量|弹药|装填弹药|拖拽|击退|爆能|倒计时|伤害|攻击|治疗|护盾|再生|点燃|灼烧|剧毒|淬毒|霜冻|覆雪|亢奋|衰弱|攻击提升|攻击下降|防御提升|防御下降|伤害提升|点燃提升|淬毒提升|覆雪提升|护盾提升|再生提升|治疗提升|暴击率提升|麻痹|封刃|禁足|推进倒计时)\s*(\d+)?(\+?)$/);
     if (!match) return null;
-    const action = normalizeSimpleAction(match[1]);
-    return {action, value: simpleActionNeedsValue(action) ? Math.max(1, Number(match[2]) || 1) : 0, gateMode: '', extraAction: '', extraValue: 0, addon, addonValue};
+    const plusAction = match[3] && ['伤害', '攻击', '点燃', '淬毒', '覆雪'].includes(match[1]);
+    const action = plusAction ? `${match[1]}+` : normalizeSimpleAction(match[1]);
+    return {action, value: simpleActionNeedsValue(action) ? Math.max(1, Number(match[2]) || 1) : 0, gateMode: '', extraAction: '', extraValue: 0, addons};
   }
 
   function parseSimpleEffectText(text) {
@@ -423,7 +480,7 @@
       const timing = normalizeSimpleTiming(match[2]);
       const condition = parseSimpleCondition(match[3]);
       const scope = match[4] || match[5];
-      match[6].split('、').map(part => part.trim()).filter(Boolean).forEach(part => {
+      match[6].split(/、(?![^〔]*〕)/).map(part => part.trim()).filter(Boolean).forEach(part => {
         const parsed = parseSimpleAction(part);
         if (parsed) rules.push({timing: timing.timing, threshold: timing.threshold || 0, triggerSource: match[1] || '自身', scope, ...condition, ...parsed});
       });
@@ -432,11 +489,13 @@
   }
 
   function simpleEffectActionText(action, value) {
-    const prefix = ['亢奋', '衰弱'].includes(action) ? '施加' : '';
-    return `${prefix}${action}${simpleActionNeedsValue(action) ? value : ''}`;
+    const plus = String(action || '').endsWith('+');
+    const baseAction = plus ? String(action).slice(0, -1) : action;
+    const prefix = ['亢奋', '衰弱'].includes(baseAction) ? '施加' : '';
+    return `${prefix}${baseAction}${simpleActionNeedsValue(action) ? value : ''}${plus ? '+' : ''}`;
   }
 
-  function simpleActionText(rule) {
+  function simpleActionText(rule, includeAddons = true) {
     const main = simpleEffectActionText(rule.action, rule.value);
     let text = main;
     if (simpleGates.has(rule.action) && rule.gateMode) {
@@ -446,9 +505,8 @@
         text = `${main}（额外效果${extra ? `：${extra}` : ''}）`;
       }
     }
-    if (rule.addon === '多重触发') return `${text}〔附加：多重触发${Math.max(1, Number(rule.addonValue) || 2)}〕`;
-    if (rule.addon === '破壳') return `${text}〔附加：破壳〕`;
-    return text;
+    const addonText = includeAddons ? simpleAddonText(normalizedRuleAddons(rule)) : '';
+    return addonText ? `${text}〔附加：${addonText}〕` : text;
   }
 
   function simpleTimingText(rule) {
@@ -467,7 +525,13 @@
   function generatedSimpleRuleText(rule, mode) {
     const sourcePrefix = mode === 'passive' ? `【触发来源：${rule.triggerSource || '自身'}】` : '';
     const conditionPrefix = mode === 'passive' && rule.condition && rule.condition !== '无条件' ? `【额外条件：${simpleConditionText(rule)}】` : '';
-    return `${sourcePrefix}【${simpleTimingText(rule)}】${conditionPrefix}【${rule.scope}】：${simpleActionText(rule)}。`;
+    return `${sourcePrefix}【${simpleTimingText(rule)}】${conditionPrefix}【${rule.scope}】：${simpleActionText(rule, mode === 'passive')}。`;
+  }
+
+  function ensurePassiveCauseControls() {
+    const container = $('#simple-passive-caused-reasons');
+    if (!container || container.children.length) return;
+    container.innerHTML = passiveCauseReasons.map(reason => `<label><input type="checkbox" data-passive-chain-reason="造成" value="${esc(reason)}">${esc(reason)}</label>`).join('');
   }
 
   function simplePanel(mode = 'active') {
@@ -488,16 +552,42 @@
       extraControls: $(`#${prefix}-extra-controls`),
       extraAction: $(`#${prefix}-extra-action`),
       extraValue: $(`#${prefix}-extra-value`),
-      addon: $(`#${prefix}-addon`),
+      addonRoot: $(`#${prefix}-addon-controls`),
+      addonInputs: `#${prefix}-addon-controls [data-simple-addon]`,
       addonValue: $(`#${prefix}-addon-value`),
+      addonCritValue: $(`#${prefix}-addon-crit-value`),
       triggerSource: $(`#${prefix}-trigger-source`),
       condition: $(`#${prefix}-condition`),
       conditionValue: $(`#${prefix}-condition-value`),
       threshold: $(`#${prefix}-threshold`),
+      triggerChain: passive ? $('#simple-passive-trigger-chain') : null,
+      triggerChainReasons: passive ? '[data-passive-chain-reason]' : '',
       clear: $(`#${prefix}-effect-clear`),
       apply: $(`#${prefix}-effect-apply`),
       help: $(`#${prefix}-effect-help`)
     };
+  }
+
+  function panelAddons(panel) {
+    const checked = $$(panel.addonInputs + ':checked');
+    return checked.map(input => {
+      if (input.dataset.simpleAddon === '多重触发') return {type: '多重触发', value: Math.max(1, Math.min(99, Number(panel.addonValue && panel.addonValue.value) || 2))};
+      if (input.dataset.simpleAddon === '暴击率') return {type: '暴击率', value: Math.max(0, Math.min(100, Number(panel.addonCritValue && panel.addonCritValue.value) || 0))};
+      return {type: input.dataset.simpleAddon, value: 0};
+    }).filter(addon => simpleAddons.includes(addon.type));
+  }
+
+  function setPanelAddons(panel, addons) {
+    const normalized = Array.isArray(addons) ? addons : [];
+    $$(panel.addonInputs).forEach(input => { input.checked = normalized.some(addon => addon.type === input.dataset.simpleAddon); });
+    const multi = normalized.find(addon => addon.type === '多重触发');
+    const crit = normalized.find(addon => addon.type === '暴击率');
+    if (panel.addonValue && multi) panel.addonValue.value = Math.max(1, Number(multi.value) || 2);
+    if (panel.addonCritValue && crit) panel.addonCritValue.value = Math.max(0, Math.min(100, Number(crit.value) || 0));
+  }
+
+  function isGlobalAddonScope(mode, item = selectedItem()) {
+    return mode === 'active' && item && item.kind !== '灵兽';
   }
 
   function simpleDraftFor(mode = 'active') {
@@ -523,7 +613,8 @@
     const panel = simplePanel(mode);
     if (!panel.root) return;
     const currentDraft = simpleDraftFor(mode);
-    panel.list.innerHTML = currentDraft.map((rule, index) => `<div class="simple-effect-row"><b>${esc(simpleTimingText(rule))}</b><i>${esc(rule.triggerSource || rule.scope)}</i><span>${esc(rule.condition && rule.condition !== '无条件' ? `${simpleConditionText(rule)} · ` : '')}${esc(rule.scope)} · ${esc(simpleActionText(rule))}</span><button type="button" data-simple-remove="${index}" aria-label="删除${esc(simpleActionText(rule))}">删除</button></div>`).join('');
+    const globalAddons = isGlobalAddonScope(mode) ? simpleAddonText(simpleActiveAddons) : '';
+    panel.list.innerHTML = (globalAddons ? `<div class="simple-effect-row simple-addon-summary"><b>整组附加</b><i>主动效果</i><span>${esc(globalAddons)}</span><span></span></div>` : '') + currentDraft.map((rule, index) => `<div class="simple-effect-row"><b>${esc(simpleTimingText(rule))}</b><i>${esc(rule.triggerSource || rule.scope)}</i><span>${esc(rule.condition && rule.condition !== '无条件' ? `${simpleConditionText(rule)} · ` : '')}${esc(rule.scope)} · ${esc(simpleActionText(rule, !isGlobalAddonScope(mode)))}</span><button type="button" data-simple-remove="${index}" aria-label="删除${esc(simpleActionText(rule, !isGlobalAddonScope(mode)))}">删除</button></div>`).join('');
     const action = panel.action.value;
     if (panel.value) panel.value.disabled = !simpleActionNeedsValue(action);
     const item = selectedItem();
@@ -538,11 +629,18 @@
     }
     if (panel.extraControls) panel.extraControls.hidden = !gate || !gateMode || gateMode.value !== '额外效果';
     if (panel.extraValue && panel.extraAction) panel.extraValue.disabled = !simpleActionNeedsValue(panel.extraAction.value);
-    if (panel.addon && panel.addonValue) {
+    const selectedAddons = panelAddons(panel);
+    if (panel.addonValue) {
       const addonField = panel.addonValue.closest('.simple-addon-value-field');
-      const needsAddonValue = panel.addon.value === '多重触发';
+      const needsAddonValue = selectedAddons.some(addon => addon.type === '多重触发');
       panel.addonValue.disabled = !needsAddonValue;
       if (addonField) addonField.hidden = !needsAddonValue;
+    }
+    if (panel.addonCritValue) {
+      const critField = panel.addonCritValue.closest('.simple-addon-crit-field');
+      const needsCritValue = selectedAddons.some(addon => addon.type === '暴击率');
+      panel.addonCritValue.disabled = !needsCritValue;
+      if (critField) critField.hidden = !needsCritValue;
     }
     if (panel.condition) {
       const condition = panel.condition.value;
@@ -558,8 +656,18 @@
       if (thresholdField) thresholdField.hidden = !hasThreshold;
       if (hasThreshold) panel.threshold.value = Math.max(1, Math.min(99, Number(panel.threshold.value) || 50));
     }
+    if (mode === 'passive' && panel.triggerChain) {
+      ensurePassiveCauseControls();
+      const selectedModes = new Set($$(panel.timing + ':checked').map(input => input.value).filter(value => passiveChainModes.includes(value)));
+      panel.triggerChain.hidden = selectedModes.size === 0;
+      $$('[data-passive-chain-group]', panel.triggerChain).forEach(group => { group.hidden = !selectedModes.has(group.dataset.passiveChainGroup); });
+    }
+    const checkedTimings = new Set($$(panel.timing + ':checked').map(input => normalizeSimpleTiming(input.value).timing));
+    const inheritedTargetAvailable = mode === 'passive' && checkedTimings.size > 0 && Array.from(checkedTimings).every(timing => inheritedTargetTimings.has(timing));
     Array.from(panel.scope.options).forEach(option => {
-      option.disabled = pet && simpleSkillScopes.has(option.value) && option.value !== '灵兽自身技能' && option.value !== '己方所有技能';
+      const inheritedUnavailable = option.value === '技能同一目标' && !inheritedTargetAvailable;
+      option.hidden = inheritedUnavailable;
+      option.disabled = inheritedUnavailable || (pet && simpleSkillScopes.has(option.value) && option.value !== '灵兽自身技能' && option.value !== '己方所有技能');
     });
     if (panel.scope.selectedOptions[0] && panel.scope.selectedOptions[0].disabled) panel.scope.value = '对自身';
     const fixedActiveTiming = !pet && mode === 'active';
@@ -579,8 +687,8 @@
     panel.help.textContent = pet
       ? '灵宠只有被动能力；简化效果只通过所选时机触发，可为自身技能或己方技能装填弹药。手写效果仍为最终依据。'
       : mode === 'passive'
-        ? '被动效果只在触发时机满足时结算；手写效果优先级最高。'
-        : '“应用于此技能”会门控能力和主动效果；写在爆能前的充能仍会先结算，写在爆能后的效果需爆能成功。';
+        ? '被动附加效果只影响同一条生效效果；手写效果优先级最高。'
+        : '主动附加效果影响整组主动效果与能力前置；“应用于此技能”仍会门控整个主动项目。';
   }
 
   function loadSimpleEffectBuilder(mode = 'active', showMessage = false) {
@@ -589,14 +697,38 @@
     const textarea = $('#item-form').elements[effectFieldFor(item, mode)];
     const parsed = parseSimpleEffectText(textarea ? textarea.value : '');
     const next = mode === 'active' && item.kind !== '灵兽' ? parsed.filter(rule => rule.timing === '使用时') : parsed;
+    if (isGlobalAddonScope(mode, item)) {
+      const oldRuleAddons = next.flatMap(normalizedRuleAddons);
+      simpleActiveAddons = parseActiveAddons(textarea ? textarea.value : '');
+      if (!simpleActiveAddons.length && oldRuleAddons.length) simpleActiveAddons = oldRuleAddons.filter((addon, index, all) => all.findIndex(item => item.type === addon.type) === index);
+      next.forEach(rule => { rule.addons = []; });
+      setPanelAddons(panel, simpleActiveAddons);
+    }
     setSimpleDraft(mode, next);
     renderSimpleEffectBuilder(mode);
     if (showMessage) showToast(next.length ? `已读取 ${next.length} 项${mode === 'passive' ? '被动' : '主动'}简化效果` : '效果栏中没有可读取的简化规则');
   }
 
+  function selectedSimpleTimings(panel, mode) {
+    const checked = $$(panel.timing + ':checked').map(input => input.value);
+    const timings = checked.filter(value => simpleTimings.includes(value));
+    if (mode !== 'passive') return timings;
+    passiveChainModes.filter(chainMode => checked.includes(chainMode)).forEach(chainMode => {
+      const reasons = $$(`[data-passive-chain-reason="${chainMode}"]:checked`).map(input => input.value);
+      reasons.forEach(reason => timings.push(chainMode === '触发' ? reason : `${chainMode}${reason}时`));
+    });
+    return timings.filter((timing, index, all) => simpleTimings.includes(timing) && all.indexOf(timing) === index);
+  }
+
   function addSimpleEffect(mode = 'active') {
     const panel = simplePanel(mode);
-    const timings = $$(panel.timing + ':checked').map(input => input.value).filter(value => simpleTimings.includes(value));
+    const checkedModes = mode === 'passive' ? $$(panel.timing + ':checked').map(input => input.value).filter(value => passiveChainModes.includes(value)) : [];
+    const missingReason = checkedModes.find(chainMode => !$$(`[data-passive-chain-reason="${chainMode}"]:checked`).length);
+    if (missingReason) {
+      showToast(`请为“${missingReason}”至少选择一个触发原因`, 'error');
+      return;
+    }
+    const timings = selectedSimpleTimings(panel, mode);
     if (!timings.length) {
       showToast('请至少选择一个触发时机', 'error');
       return;
@@ -609,8 +741,8 @@
     const extraAction = gateMode === '额外效果' ? panel.extraAction.value : '';
     if (extraAction && !simpleExtraActions.includes(extraAction)) return;
     const extraValue = extraAction && simpleActionNeedsValue(extraAction) ? Math.max(1, Math.min(99, Number(panel.extraValue.value) || 1)) : 0;
-    const addon = panel.addon && simpleAddons.includes(panel.addon.value) ? panel.addon.value : '无';
-    const addonValue = addon === '多重触发' && panel.addonValue ? Math.max(1, Math.min(99, Number(panel.addonValue.value) || 2)) : 0;
+    const addons = panelAddons(panel);
+    if (isGlobalAddonScope(mode)) simpleActiveAddons = addons;
     const triggerSource = mode === 'passive' && panel.triggerSource && passiveTriggerSources.includes(panel.triggerSource.value) ? panel.triggerSource.value : '自身';
     const condition = mode === 'passive' && panel.condition && simpleConditions.includes(panel.condition.value) ? panel.condition.value : '无条件';
     const conditionValue = mode === 'passive' && panel.conditionValue && ['爆能', '倒计时', '消耗弹药', '每拥有能量弹药'].includes(condition)
@@ -620,12 +752,30 @@
     const currentDraft = simpleDraftFor(mode);
     timings.forEach(timing => {
       const normalizedTiming = normalizeSimpleTiming(timing);
-      const next = {timing: normalizedTiming.timing, threshold: normalizedTiming.timing === '生命值低于（%）时' ? threshold : 0, triggerSource, condition, conditionValue, scope, action, value, gateMode, extraAction, extraValue, addon, addonValue};
+      const next = {timing: normalizedTiming.timing, threshold: normalizedTiming.timing === '生命值低于（%）时' ? threshold : 0, triggerSource, condition, conditionValue, scope, action, value, gateMode, extraAction, extraValue, addons: isGlobalAddonScope(mode) ? [] : addons};
       const existing = currentDraft.find(rule => rule.timing === next.timing && rule.threshold === next.threshold && rule.scope === scope && rule.action === action && (mode !== 'passive' || rule.triggerSource === triggerSource));
       if (existing) Object.assign(existing, next);
       else currentDraft.push(next);
     });
     renderSimpleEffectBuilder(mode);
+  }
+
+  function abilityTextForSimpleRule(rule) {
+    const action = String(rule && rule.action || '');
+    const plus = action.endsWith('+');
+    const baseAction = plus ? action.slice(0, -1) : action;
+    const abilityName = ({伤害:'攻击', 攻击:'攻击', 点燃:'点燃', 剧毒:'淬毒', 淬毒:'淬毒', 霜冻:'覆雪', 覆雪:'覆雪', 护盾:'护盾', 治疗:'治疗', 再生:'再生'})[baseAction];
+    if (!abilityName) return '';
+    return `${abilityName}${Math.max(1, Number(rule.value) || 1)}${plus ? '+' : ''}`;
+  }
+
+  function syncAbilityFromActiveDraft() {
+    const form = $('#item-form');
+    const ability = form && form.elements['能力'];
+    if (!ability) return;
+    const entries = simpleDraft.map(abilityTextForSimpleRule).filter(Boolean);
+    const unique = entries.filter((entry, index) => entries.indexOf(entry) === index);
+    if (unique.length) ability.value = unique.join('、');
   }
 
   function applySimpleEffects(mode = 'active') {
@@ -643,18 +793,24 @@
       return;
     }
     const item = selectedItem();
+    const globalAddonScope = isGlobalAddonScope(mode, item);
+    if (globalAddonScope) simpleActiveAddons = panelAddons(simplePanel(mode));
     const textarea = $('#item-form').elements[effectFieldFor(item, mode)];
     if (!textarea) return;
     const manual = textarea.value
       .replace(simpleRulePattern(), '')
+      .replace(activeAddonPattern(), '')
       .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
-    const generated = groups.map(group => {
+    const ruleText = groups.map(group => {
       const first = group.rules[0];
       const sourcePrefix = mode === 'passive' ? `【触发来源：${first.triggerSource || '自身'}】` : '';
       const conditionPrefix = mode === 'passive' && first.condition && first.condition !== '无条件' ? `【额外条件：${simpleConditionText(first)}】` : '';
-      return `${sourcePrefix}【${simpleTimingText(first)}】${conditionPrefix}【${group.scope}】：${group.rules.map(simpleActionText).join('、')}。`;
+      return `${sourcePrefix}【${simpleTimingText(first)}】${conditionPrefix}【${group.scope}】：${group.rules.map(rule => simpleActionText(rule, !globalAddonScope)).join('、')}。`;
     }).join('\n');
+    const activeAddonLine = globalAddonScope && simpleActiveAddons.length ? `【主动附加：${simpleAddonText(simpleActiveAddons)}】` : '';
+    const generated = [activeAddonLine, ruleText].filter(Boolean).join('\n');
     textarea.value = [manual, generated].filter(Boolean).join('\n');
+    if (globalAddonScope) syncAbilityFromActiveDraft();
     loadSimpleEffectBuilder(mode);
     markDirty();
     showToast('简化规则已应用；保存后同步到战斗模拟器');
@@ -801,10 +957,18 @@
     const nextBuilderKey = `${item.id}:${quality}`;
     if (simpleBuilderKey !== nextBuilderKey) {
       simpleBuilderKey = nextBuilderKey;
-      simpleDraft = parseSimpleEffectText(pet ? (fields['一句话效果'] || '') : skillActiveEffect(fields));
-      if (!pet) simpleDraft = simpleDraft.filter(rule => rule.timing === '使用时');
+      const activeText = pet ? (fields['一句话效果'] || '') : skillActiveEffect(fields);
+      simpleDraft = parseSimpleEffectText(activeText);
+      if (!pet) {
+        simpleDraft = simpleDraft.filter(rule => rule.timing === '使用时');
+        simpleActiveAddons = parseActiveAddons(activeText);
+        if (!simpleActiveAddons.length) simpleActiveAddons = simpleDraft.flatMap(normalizedRuleAddons).filter((addon, index, all) => all.findIndex(item => item.type === addon.type) === index);
+        simpleDraft.forEach(rule => { rule.addons = []; });
+      } else simpleActiveAddons = [];
       simpleDraftPassive = pet ? [] : parseSimpleEffectText(skillPassiveEffect(fields));
-      $$('input[name="simple-timing"], input[name="simple-passive-timing"]').forEach(input => { input.checked = false; });
+      setPanelAddons(simplePanel('active'), pet ? [] : simpleActiveAddons);
+      setPanelAddons(simplePanel('passive'), []);
+      $$('input[name="simple-timing"], input[name="simple-passive-timing"], [data-passive-chain-reason]').forEach(input => { input.checked = false; });
     }
     renderSimpleEffectBuilder('active');
     renderSimpleEffectBuilder('passive');
@@ -828,6 +992,10 @@
       const qualityIndex = qualities.indexOf(quality);
       syncButton.disabled = qualityIndex <= 0;
       syncButton.title = syncButton.disabled ? '青铜是第一品质，没有上一品质' : `复制${qualities[qualityIndex - 1]}品质的射程配置`;
+      $$('[data-copy-previous-effect]').forEach(button => {
+        button.disabled = qualityIndex <= 0;
+        button.title = button.disabled ? '青铜是第一品质，没有上一级效果' : `复制${qualities[qualityIndex - 1]}品质的${button.dataset.copyPreviousEffect === 'passive' ? '被动' : '主动'}效果`;
+      });
     }
     const tagInput = form.elements['词条'];
     tagInput.value = canonicalTags(item);
@@ -1212,20 +1380,32 @@
   $('#range-clear').addEventListener('click', () => setRangeCells(false));
   $('#range-fill').addEventListener('click', () => setRangeCells(true));
   $('#range-sync-previous').addEventListener('click', syncPreviousRange);
+  $$('[data-copy-previous-effect]').forEach(button => button.addEventListener('click', () => copyPreviousEffect(button.dataset.copyPreviousEffect)));
+  ensurePassiveCauseControls();
   ['active', 'passive'].forEach(mode => {
     const panel = simplePanel(mode);
     if (!panel.root) return;
     panel.action.addEventListener('change', () => renderSimpleEffectBuilder(mode));
     if (panel.gateMode) panel.gateMode.addEventListener('change', () => renderSimpleEffectBuilder(mode));
     if (panel.extraAction) panel.extraAction.addEventListener('change', () => renderSimpleEffectBuilder(mode));
-    if (panel.addon) panel.addon.addEventListener('change', () => renderSimpleEffectBuilder(mode));
+    $$(panel.addonInputs).forEach(input => input.addEventListener('change', () => {
+      if (isGlobalAddonScope(mode)) simpleActiveAddons = panelAddons(panel);
+      renderSimpleEffectBuilder(mode);
+    }));
+    if (panel.addonValue) panel.addonValue.addEventListener('input', () => { if (isGlobalAddonScope(mode)) simpleActiveAddons = panelAddons(panel); renderSimpleEffectBuilder(mode); });
+    if (panel.addonCritValue) panel.addonCritValue.addEventListener('input', () => { if (isGlobalAddonScope(mode)) simpleActiveAddons = panelAddons(panel); renderSimpleEffectBuilder(mode); });
     if (panel.condition) panel.condition.addEventListener('change', () => renderSimpleEffectBuilder(mode));
     if (panel.triggerSource) panel.triggerSource.addEventListener('change', () => renderSimpleEffectBuilder(mode));
     if (panel.threshold) panel.threshold.addEventListener('input', () => renderSimpleEffectBuilder(mode));
     $$(panel.timing).forEach(input => input.addEventListener('change', () => renderSimpleEffectBuilder(mode)));
+    if (mode === 'passive') $$(panel.triggerChainReasons).forEach(input => input.addEventListener('change', () => renderSimpleEffectBuilder(mode)));
     panel.add.addEventListener('click', () => addSimpleEffect(mode));
     panel.read.addEventListener('click', () => loadSimpleEffectBuilder(mode, true));
-    panel.clear.addEventListener('click', () => { setSimpleDraft(mode, []); renderSimpleEffectBuilder(mode); });
+    panel.clear.addEventListener('click', () => {
+      setSimpleDraft(mode, []);
+      if (isGlobalAddonScope(mode)) { simpleActiveAddons = []; setPanelAddons(panel, []); }
+      renderSimpleEffectBuilder(mode);
+    });
     panel.apply.addEventListener('click', () => applySimpleEffects(mode));
     panel.list.addEventListener('click', event => {
       const button = event.target.closest('[data-simple-remove]');

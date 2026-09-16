@@ -41,7 +41,7 @@
     </section>
 
     <aside class="side-panel log-panel">
-      <div class="panel-title"><div><span class="kicker">EVENT STREAM</span><h2>战斗日志</h2></div><button id="clear-log" class="icon-btn" title="清空日志">⌫</button></div>
+      <div class="panel-title"><div><span class="kicker">EVENT STREAM</span><h2>战斗日志</h2></div><div class="log-actions"><button id="format-log" class="ghost-btn log-action-btn">整理文本</button><button id="clear-log" class="icon-btn" title="清空日志">⌫</button></div></div>
       <div class="log-summary"><div><span>本回合</span><strong id="round-log-count">0</strong></div><div><span>造成伤害</span><strong id="damage-total">0</strong></div><div><span>触发事件</span><strong id="event-total">0</strong></div></div>
       <div id="combat-log" class="combat-log" aria-live="polite"></div>
       <div class="log-footer"><span class="pulse"></span>每个事件按实际结算顺序写入</div>
@@ -90,6 +90,12 @@
           <article class="glossary-card"><span>LOG</span><h4>日志与详情</h4><p>点击灵宠或技能查看实时详情，技能卡可拖拽排序。日志按真实结算顺序追加，并用颜色区分伤害、灼烧、剧毒、护盾、治疗和霜冻。</p></article>
         </div>
       </div>
+    </section>
+  </div>
+  <div id="log-text-modal" class="skill-info-modal" hidden>
+    <section class="skill-info-dialog log-text-dialog" role="dialog" aria-modal="true" aria-labelledby="log-text-title">
+      <div class="skill-info-head"><div><span class="kicker">TEXT EXPORT / COMBAT LOG</span><h2 id="log-text-title">整理战斗日志</h2></div><button id="close-log-text" class="icon-btn" title="关闭文本日志">×</button></div>
+      <div class="log-text-content"><p class="log-text-help">已按回合、结算步骤和事件类型整理为纯文本，可直接复制到聊天、文档或测试记录中。</p><textarea id="log-text-output" class="log-text-output" readonly spellcheck="false"></textarea><div class="log-text-actions"><button id="copy-log-text" class="primary-btn">复制文本</button><button id="download-log-text" class="ghost-btn">下载 .txt</button></div></div>
     </section>
   </div>
   <script src="graph-data.js"></script>

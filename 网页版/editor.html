@@ -84,8 +84,8 @@
             <div id="range-grid" class="range-grid" role="grid" aria-label="9乘9攻击范围编辑器"></div>
             <p id="range-help" class="range-help">无条件技能：点击棋盘设置红色命中格。</p>
           </section>
-          <label class="field full effect-channel-field active-skill-option"><span>主动效果 <small>能力会在战斗中作为技能主动能力显示；可继续输入完整规则</small></span><textarea name="主动效果" rows="7" placeholder="输入主动技能效果、爆能/倒计时与目标规则"></textarea></label>
-          <label class="field full effect-channel-field passive-channel-field"><span>被动效果 <small>可与主动效果同时存在，仅在对应触发时机结算</small></span><textarea name="被动效果" rows="7" placeholder="输入受到伤害、回合开始、使用其它技能等被动规则"></textarea></label>
+          <div class="field full effect-channel-field active-skill-option"><div class="effect-field-heading"><span>主动效果 <small>能力会在战斗中作为技能主动能力显示；可继续输入完整规则</small></span><button type="button" data-copy-previous-effect="active">复制上一级</button></div><textarea name="主动效果" rows="7" placeholder="输入主动技能效果、爆能/倒计时与目标规则"></textarea></div>
+          <div class="field full effect-channel-field passive-channel-field"><div class="effect-field-heading"><span>被动效果 <small>可与主动效果同时存在，仅在对应触发时机结算</small></span><button type="button" data-copy-previous-effect="passive">复制上一级</button></div><textarea name="被动效果" rows="7" placeholder="输入受到伤害、回合开始、使用其它技能等被动规则"></textarea></div>
           <label class="field"><span>定位</span><input name="定位" placeholder="例如：核心输出"></label>
         </div>
         <div id="pet-fields" class="form-grid kind-fields" hidden>
@@ -110,27 +110,33 @@
             <label><input type="checkbox" name="simple-timing" value="战斗结束时">战斗结束时</label>
             <label><input type="checkbox" name="simple-timing" value="使用自身携带其它技能时">使用自身携带其它技能时</label>
             <label><input type="checkbox" name="simple-timing" value="使用任意技能时">使用任意技能时</label>
-            <label><input type="checkbox" name="simple-timing" value="造成伤害时">造成伤害时</label>
-            <label><input type="checkbox" name="simple-timing" value="受到伤害时">受到伤害时</label>
             <label><input type="checkbox" name="simple-timing" value="失去护盾">失去护盾</label>
             <label><input type="checkbox" name="simple-timing" value="生命值下降至以下时">生命值下降至以下时</label>
             <label><input type="checkbox" name="simple-timing" value="战斗胜利时">战斗胜利时</label>
             <label><input type="checkbox" name="simple-timing" value="弹药耗尽时">弹药耗尽时</label>
           </fieldset>
           <div class="simple-effect-controls">
-            <label class="field"><span>作用对象</span><select id="simple-effect-scope"><option>对目标</option><option>对自身</option><option>对目标和自身</option><option>对我方全体</option><option>对敌方全体</option><option>左侧相邻技能</option><option>右侧相邻技能</option><option>灵兽自身技能</option><option>己方所有技能</option></select></label>
-            <label class="field"><span>泛用效果</span><select id="simple-effect-action"><option>充能</option><option>装填弹药</option><option>拖拽</option><option>击退</option><option>爆能</option><option>倒计时</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>灼烧</option><option>剧毒</option><option>淬毒</option><option>霜冻</option><option>覆雪</option><option>亢奋</option><option>衰弱</option><option>攻击提升</option><option>攻击下降</option><option>防御提升</option><option>防御下降</option><option>伤害提升</option><option>暴击率提升</option><option>麻痹</option><option>封刃</option><option>禁足</option><option>能量</option><option>推进倒计时</option></select></label>
+            <label class="field"><span>作用对象</span><select id="simple-effect-scope"><option>对目标</option><option>对自身</option><option>对目标和自身</option><option>对我方全体</option><option>对敌方全体</option><option>左侧相邻技能</option><option>右侧相邻技能</option><option>左右两侧相邻技能</option><option>灵兽自身技能</option><option>己方所有技能</option></select></label>
+            <label class="field"><span>泛用效果</span><select id="simple-effect-action"><option>充能</option><option>装填弹药</option><option>爆能</option><option>倒计时</option><option>伤害</option><option>攻击+</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>点燃+</option><option>灼烧</option><option>剧毒</option><option>淬毒</option><option>淬毒+</option><option>霜冻</option><option>覆雪</option><option>覆雪+</option><option>亢奋</option><option>衰弱</option><option>攻击提升</option><option>攻击下降</option><option>防御提升</option><option>防御下降</option><option>伤害提升</option><option>点燃提升</option><option>淬毒提升</option><option>覆雪提升</option><option>护盾提升</option><option>再生提升</option><option>治疗提升</option><option>暴击率提升</option><option>麻痹</option><option>封刃</option><option>禁足</option><option>能量</option><option>推进倒计时</option></select></label>
             <label class="field simple-value-field"><span>数值 X</span><input id="simple-effect-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
             <button id="simple-effect-add" type="button">加入所选时机</button>
           </div>
-          <div class="simple-addon-controls">
-            <label class="field"><span>附加效果 <small>独立于泛用效果</small></span><select id="simple-addon"><option>无</option><option>多重触发</option><option>破壳</option></select></label>
+          <div class="simple-addon-controls" id="simple-addon-controls">
+            <div class="simple-addon-heading"><span>附加效果（可多选）</span><small>影响整组主动效果，包括能力前置</small></div>
+            <div class="simple-addon-options">
+              <label><input type="checkbox" data-simple-addon="多重触发">多重触发</label>
+              <label><input type="checkbox" data-simple-addon="破壳">破壳</label>
+              <label><input type="checkbox" data-simple-addon="暴击率">暴击率</label>
+              <label><input type="checkbox" data-simple-addon="击退">击退</label>
+              <label><input type="checkbox" data-simple-addon="拖拽">拖拽</label>
+            </div>
             <label class="field simple-addon-value-field" hidden><span>多重触发次数 X</span><input id="simple-addon-value" type="number" min="1" max="99" value="2" inputmode="numeric"></label>
+            <label class="field simple-addon-crit-field" hidden><span>暴击率 %</span><input id="simple-addon-crit-value" type="number" min="0" max="100" value="10" inputmode="numeric"></label>
           </div>
           <div id="simple-gate-options" class="simple-gate-options" hidden>
             <label class="field"><span>爆能 / 倒计时生效方式</span><select id="simple-gate-mode"><option>额外效果</option><option>应用于此技能</option></select></label>
             <div id="simple-extra-controls" class="simple-extra-controls">
-              <label class="field"><span>额外泛用效果</span><select id="simple-extra-action"><option>充能</option><option>装填弹药</option><option>拖拽</option><option>击退</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>剧毒</option><option>霜冻</option><option>亢奋</option><option>衰弱</option></select></label>
+              <label class="field"><span>额外泛用效果</span><select id="simple-extra-action"><option>充能</option><option>装填弹药</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>剧毒</option><option>霜冻</option><option>亢奋</option><option>衰弱</option></select></label>
               <label class="field simple-value-field"><span>额外数值 X</span><input id="simple-extra-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
             </div>
           </div>
@@ -150,33 +156,57 @@
             <label><input type="checkbox" name="simple-passive-timing" value="被攻击时">被攻击时</label>
             <label><input type="checkbox" name="simple-passive-timing" value="使用时">使用时</label>
             <label><input type="checkbox" name="simple-passive-timing" value="战斗结束时">战斗结束时</label>
-            <label><input type="checkbox" name="simple-passive-timing" value="使用自身携带其它技能时">使用自身携带其它技能时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="使用自身携带的其它技能时">使用自身携带的其它技能时</label>
             <label><input type="checkbox" name="simple-passive-timing" value="使用任意技能时">使用任意技能时</label>
-            <label><input type="checkbox" name="simple-passive-timing" value="造成伤害时">造成伤害时</label>
-            <label><input type="checkbox" name="simple-passive-timing" value="受到伤害时">受到伤害时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="使用左侧相邻技能时">使用左侧相邻技能时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="使用右侧相邻技能时">使用右侧相邻技能时</label>
+            <label><input type="checkbox" name="simple-passive-timing" value="使用两侧相邻技能时">使用两侧相邻技能时</label>
             <label><input type="checkbox" name="simple-passive-timing" value="失去护盾">失去护盾</label>
             <label><input type="checkbox" name="simple-passive-timing" value="生命值低于（%）时">生命值低于（%）时</label>
             <label><input type="checkbox" name="simple-passive-timing" value="战斗胜利时">战斗胜利时</label>
             <label><input type="checkbox" name="simple-passive-timing" value="弹药耗尽时">弹药耗尽时</label>
+            <label class="passive-chain-mode"><input type="checkbox" name="simple-passive-timing" value="受到">受到</label>
+            <label class="passive-chain-mode"><input type="checkbox" name="simple-passive-timing" value="造成">造成</label>
+            <label class="passive-chain-mode"><input type="checkbox" name="simple-passive-timing" value="触发">触发</label>
           </fieldset>
+          <div id="simple-passive-trigger-chain" class="passive-trigger-chain" hidden>
+            <div class="passive-trigger-chain-heading"><span>被动触发原因（可多选）</span><small>事件发生后，再依次判定额外条件、生效效果与作用目标</small></div>
+            <section data-passive-chain-group="受到" hidden><h4>受到以下效果时</h4><div class="passive-trigger-reasons">
+              <label><input type="checkbox" data-passive-chain-reason="受到" value="伤害">伤害</label><label><input type="checkbox" data-passive-chain-reason="受到" value="点燃">点燃</label><label><input type="checkbox" data-passive-chain-reason="受到" value="灼烧">灼烧</label><label><input type="checkbox" data-passive-chain-reason="受到" value="淬毒">淬毒</label><label><input type="checkbox" data-passive-chain-reason="受到" value="剧毒">剧毒</label><label><input type="checkbox" data-passive-chain-reason="受到" value="覆雪">覆雪</label><label><input type="checkbox" data-passive-chain-reason="受到" value="霜冻">霜冻</label><label><input type="checkbox" data-passive-chain-reason="受到" value="治疗">治疗</label><label><input type="checkbox" data-passive-chain-reason="受到" value="护盾">护盾</label><label><input type="checkbox" data-passive-chain-reason="受到" value="再生">再生</label><label><input type="checkbox" data-passive-chain-reason="受到" value="能量增加">能量增加</label><label><input type="checkbox" data-passive-chain-reason="受到" value="能量减少">能量减少</label><label><input type="checkbox" data-passive-chain-reason="受到" value="亢奋">亢奋</label><label><input type="checkbox" data-passive-chain-reason="受到" value="衰弱">衰弱</label><label><input type="checkbox" data-passive-chain-reason="受到" value="麻痹">麻痹</label><label><input type="checkbox" data-passive-chain-reason="受到" value="禁足">禁足</label><label><input type="checkbox" data-passive-chain-reason="受到" value="封刃">封刃</label><label><input type="checkbox" data-passive-chain-reason="受到" value="装填弹药">装填弹药</label>
+              <label><input type="checkbox" data-passive-chain-reason="受到" value="伤害提升">伤害提升</label><label><input type="checkbox" data-passive-chain-reason="受到" value="暴击提升">暴击提升</label><label><input type="checkbox" data-passive-chain-reason="受到" value="防御提升">防御提升</label><label><input type="checkbox" data-passive-chain-reason="受到" value="攻击提升">攻击提升</label><label><input type="checkbox" data-passive-chain-reason="受到" value="点燃提升">点燃提升</label><label><input type="checkbox" data-passive-chain-reason="受到" value="淬毒提升">淬毒提升</label><label><input type="checkbox" data-passive-chain-reason="受到" value="覆雪提升">覆雪提升</label><label><input type="checkbox" data-passive-chain-reason="受到" value="护盾提升">护盾提升</label><label><input type="checkbox" data-passive-chain-reason="受到" value="再生提升">再生提升</label><label><input type="checkbox" data-passive-chain-reason="受到" value="治疗提升">治疗提升</label>
+              <label><input type="checkbox" data-passive-chain-reason="受到" value="伤害降低">伤害降低</label><label><input type="checkbox" data-passive-chain-reason="受到" value="暴击降低">暴击降低</label><label><input type="checkbox" data-passive-chain-reason="受到" value="防御降低">防御降低</label><label><input type="checkbox" data-passive-chain-reason="受到" value="攻击降低">攻击降低</label><label><input type="checkbox" data-passive-chain-reason="受到" value="点燃降低">点燃降低</label><label><input type="checkbox" data-passive-chain-reason="受到" value="淬毒降低">淬毒降低</label><label><input type="checkbox" data-passive-chain-reason="受到" value="覆雪降低">覆雪降低</label><label><input type="checkbox" data-passive-chain-reason="受到" value="护盾降低">护盾降低</label><label><input type="checkbox" data-passive-chain-reason="受到" value="再生降低">再生降低</label><label><input type="checkbox" data-passive-chain-reason="受到" value="治疗降低">治疗降低</label>
+            </div></section>
+            <section data-passive-chain-group="造成" hidden><h4>造成以下效果时</h4><div class="passive-trigger-reasons" id="simple-passive-caused-reasons"></div></section>
+            <section data-passive-chain-group="触发" hidden><h4>触发以下结算时</h4><div class="passive-trigger-reasons passive-trigger-reasons-short">
+              <label><input type="checkbox" data-passive-chain-reason="触发" value="技能触发暴击时">技能触发暴击时</label><label><input type="checkbox" data-passive-chain-reason="触发" value="触发目标灼烧伤害时">触发目标灼烧伤害时</label><label><input type="checkbox" data-passive-chain-reason="触发" value="触发霜冻伤害时">触发霜冻伤害时</label><label><input type="checkbox" data-passive-chain-reason="触发" value="触发剧毒伤害时">触发剧毒伤害时</label>
+            </div></section>
+          </div>
           <div class="passive-rule-steps">
-            <label class="field"><span>触发来源</span><select id="simple-passive-trigger-source"><option>敌方</option><option>友方</option><option>自身</option><option>自身及友方</option><option>左侧相邻技能</option><option>右侧相邻技能</option><option>自身携带技能</option><option>友方所有技能</option></select></label>
+            <label class="field"><span>触发来源</span><select id="simple-passive-trigger-source"><option>敌方</option><option>友方</option><option>自身</option><option>自身及友方</option><option>左侧相邻技能</option><option>右侧相邻技能</option><option>左右两侧相邻技能</option><option>自身携带技能</option><option>友方所有技能</option></select></label>
             <label class="field"><span>额外条件</span><select id="simple-passive-condition"><option value="无条件">无条件</option><option value="爆能">爆能X</option><option value="倒计时">倒计时X</option><option value="剩余弹药">是否剩余弹药</option><option value="消耗弹药">消耗弹药X</option><option value="每拥有能量弹药">每拥有X点能量/弹药</option></select></label>
             <label class="field simple-condition-value-field"><span>条件数值 X</span><input id="simple-passive-condition-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
-            <label class="field"><span>生效效果</span><select id="simple-passive-effect-action"><option>充能</option><option>装填弹药</option><option>拖拽</option><option>击退</option><option>爆能</option><option>倒计时</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>灼烧</option><option>剧毒</option><option>淬毒</option><option>霜冻</option><option>覆雪</option><option>亢奋</option><option>衰弱</option><option>攻击提升</option><option>攻击下降</option><option>防御提升</option><option>防御下降</option><option>伤害提升</option><option>暴击率提升</option><option>麻痹</option><option>封刃</option><option>禁足</option><option>能量</option><option>推进倒计时</option></select></label>
-            <label class="field"><span>作用目标</span><select id="simple-passive-effect-scope"><option>对目标</option><option>对自身</option><option>对目标和自身</option><option>对我方全体</option><option>对敌方全体</option><option>左侧相邻技能</option><option>右侧相邻技能</option><option>灵兽自身技能</option><option>己方所有技能</option></select></label>
+            <label class="field"><span>生效效果</span><select id="simple-passive-effect-action"><option>充能</option><option>装填弹药</option><option>爆能</option><option>倒计时</option><option>伤害</option><option>伤害+</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>点燃+</option><option>灼烧</option><option>剧毒</option><option>淬毒</option><option>淬毒+</option><option>霜冻</option><option>覆雪</option><option>覆雪+</option><option>亢奋</option><option>衰弱</option><option>攻击提升</option><option>攻击下降</option><option>防御提升</option><option>防御下降</option><option>伤害提升</option><option>点燃提升</option><option>淬毒提升</option><option>覆雪提升</option><option>护盾提升</option><option>再生提升</option><option>治疗提升</option><option>暴击率提升</option><option>麻痹</option><option>封刃</option><option>禁足</option><option>能量</option><option>推进倒计时</option></select></label>
+            <label class="field"><span>作用目标</span><select id="simple-passive-effect-scope"><option>对目标</option><option>技能同一目标</option><option>对自身</option><option>对目标和自身</option><option>对我方全体</option><option>对敌方全体</option><option>左侧相邻技能</option><option>右侧相邻技能</option><option>左右两侧相邻技能</option><option>灵兽自身技能</option><option>己方所有技能</option></select></label>
             <label class="field simple-value-field"><span>效果数值 X</span><input id="simple-passive-effect-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
             <label class="field threshold-value-field" hidden><span>生命百分比 %</span><input id="simple-passive-threshold" type="number" min="1" max="99" value="50" inputmode="numeric"></label>
             <button id="simple-passive-effect-add" type="button">加入被动规则</button>
           </div>
-          <div class="simple-addon-controls">
-            <label class="field"><span>附加效果 <small>独立于生效效果</small></span><select id="simple-passive-addon"><option>无</option><option>多重触发</option><option>破壳</option></select></label>
+          <div class="simple-addon-controls" id="simple-passive-addon-controls">
+            <div class="simple-addon-heading"><span>附加效果（可多选）</span><small>只影响本次加入的被动效果项目</small></div>
+            <div class="simple-addon-options">
+              <label><input type="checkbox" data-simple-addon="多重触发">多重触发</label>
+              <label><input type="checkbox" data-simple-addon="破壳">破壳</label>
+              <label><input type="checkbox" data-simple-addon="暴击率">暴击率</label>
+              <label><input type="checkbox" data-simple-addon="击退">击退</label>
+              <label><input type="checkbox" data-simple-addon="拖拽">拖拽</label>
+            </div>
             <label class="field simple-addon-value-field" hidden><span>多重触发次数 X</span><input id="simple-passive-addon-value" type="number" min="1" max="99" value="2" inputmode="numeric"></label>
+            <label class="field simple-addon-crit-field" hidden><span>暴击率 %</span><input id="simple-passive-addon-crit-value" type="number" min="0" max="100" value="10" inputmode="numeric"></label>
           </div>
           <div id="simple-passive-gate-options" class="simple-gate-options" hidden>
             <label class="field"><span>爆能 / 倒计时生效方式</span><select id="simple-passive-gate-mode"><option>额外效果</option><option>应用于此技能</option></select></label>
             <div id="simple-passive-extra-controls" class="simple-extra-controls">
-              <label class="field"><span>额外泛用效果</span><select id="simple-passive-extra-action"><option>充能</option><option>装填弹药</option><option>拖拽</option><option>击退</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>剧毒</option><option>霜冻</option><option>亢奋</option><option>衰弱</option></select></label>
+              <label class="field"><span>额外泛用效果</span><select id="simple-passive-extra-action"><option>充能</option><option>装填弹药</option><option>伤害</option><option>治疗</option><option>护盾</option><option>再生</option><option>点燃</option><option>剧毒</option><option>霜冻</option><option>亢奋</option><option>衰弱</option></select></label>
               <label class="field simple-value-field"><span>额外数值 X</span><input id="simple-passive-extra-value" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
             </div>
           </div>

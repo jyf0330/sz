@@ -166,47 +166,75 @@
     VALUE_PATTERN.lastIndex = 0;
     return entries;
   }
+  function valueEntriesFromSimpleRules(rules) {
+    const kinds = {伤害:'damage', 点燃:'burn', 剧毒:'poison', 霜冻:'frost', 护盾:'shield', 治疗:'heal', 再生:'regen'};
+    return (rules || []).flatMap(rule => (rule.actions || []).filter(action => action.abilityEntry && kinds[action.type]).map(action => ({
+      kind: kinds[action.type],
+      label: VALUE_LABELS[kinds[action.type]],
+      base: Math.max(0, Number(action.value) || 0),
+      plus: !!action.plus,
+      timing: rule.timing,
+      channel: rule.channel || ''
+    })));
+  }
+  function parseEffectAddons(text) {
+    return String(text || '').split(/[、，,]/).map(part => part.trim()).filter(Boolean).map(part => {
+      const valued = part.match(/^(多重触发|暴击率)\s*(\d+)?%?$/);
+      if (valued) return {type: valued[1], value: valued[1] === '暴击率' ? Math.max(0, Math.min(100, Number(valued[2]) || 0)) : Math.max(1, Math.min(99, Number(valued[2]) || 2))};
+      return /^(破壳|击退|拖拽)$/.test(part) ? {type: part, value: 0} : null;
+    }).filter(Boolean).filter((addon, index, all) => all.findIndex(item => item.type === addon.type) === index);
+  }
+  function parseActiveEffectAddons(text) {
+    const match = String(text || '').match(/【主动附加[：:=]([^】]+)】/);
+    return parseEffectAddons(match && match[1]);
+  }
   function parseSimpleEffectRules(text) {
     const rules = [];
     const normalizeAction = action => ({弹药:'装填弹药', 填充弹药:'装填弹药', 灼烧:'点燃', 淬毒:'剧毒', 覆雪:'霜冻', 能量:'充能'})[action] || action;
-    const pattern = /(?:【(?:触发来源|来源)[：:=]([^】]+)】)?【([^】]+)】(?:【额外条件[：:=]([^】]+)】)?(?:【(对目标和自身|对自身|对目标|对我方全体|对敌方全体|左侧相邻技能|右侧相邻技能|灵兽自身技能|己方所有技能)】|(对目标和自身|对自身|对目标|对我方全体|对敌方全体|左侧相邻技能|右侧相邻技能|灵兽自身技能|己方所有技能))：([^。\n]+)/g;
+    const pattern = /(?:【(?:触发来源|来源)[：:=]([^】]+)】)?【([^】]+)】(?:【额外条件[：:=]([^】]+)】)?(?:【(技能同一目标|对目标和自身|对自身|对目标|对我方全体|对敌方全体|左侧相邻技能|右侧相邻技能|左右两侧相邻技能|灵兽自身技能|己方所有技能)】|(技能同一目标|对目标和自身|对自身|对目标|对我方全体|对敌方全体|左侧相邻技能|右侧相邻技能|左右两侧相邻技能|灵兽自身技能|己方所有技能))：([^。\n]+)/g;
     let match;
     while ((match = pattern.exec(String(text || '')))) {
       const timingRaw = String(match[2] || '').trim();
       const thresholdMatch = timingRaw.match(/^生命值(?:低于|下降至)\s*[（(]?(\d+(?:\.\d+)?)%?[）)]?\s*(?:时|以下时)?$/);
-      const timing = thresholdMatch ? '生命值低于（%）时' : timingRaw === '回合开始时' ? '回合开始' : timingRaw === '回合结束时' ? '回合结束' : timingRaw;
+      const timing = thresholdMatch ? '生命值低于（%）时' : timingRaw === '回合开始时' ? '回合开始' : timingRaw === '回合结束时' ? '回合结束' : timingRaw === '使用自身携带其它技能时' ? '使用自身携带的其它技能时' : timingRaw;
       const threshold = thresholdMatch ? Math.max(1, Math.min(99, Number(thresholdMatch[1]) || 50)) : 0;
       const conditionRaw = String(match[3] || '').trim();
       const conditionMatch = conditionRaw.match(/^(爆能|倒计时|消耗弹药|每拥有能量弹药)\s*(\d+)?/);
       const condition = !conditionRaw || conditionRaw === '无条件' || conditionRaw === '无' ? '无条件' : /剩余弹药|是否剩余弹药/.test(conditionRaw) ? '剩余弹药' : conditionMatch ? conditionMatch[1] : '无条件';
       const conditionValue = conditionMatch ? Math.max(1, Number(conditionMatch[2]) || 1) : 0;
       const scope = match[4] || match[5];
-      const actions = match[6].split('、').map(part => part.trim()).flatMap(part => {
-        const addonMatch = part.match(/\s*〔附加：(多重触发|破壳)\s*(\d+)?〕\s*$/);
-        const addon = addonMatch ? addonMatch[1] : '';
-        const addonValue = addon === '多重触发' ? Math.max(1, Number(addonMatch && addonMatch[2]) || 2) : 0;
+      const actions = match[6].split(/、(?![^〔]*〕)/).map(part => part.trim()).flatMap(part => {
+        const addonMatch = part.match(/\s*〔附加：([^〕]+)〕\s*$/);
+        const addons = parseEffectAddons(addonMatch && addonMatch[1]);
         const source = addonMatch ? part.slice(0, addonMatch.index).trim() : part;
         const gate = source.match(/^(爆能|倒计时)\s*(\d+)?(?:[（(](额外效果|应用于此技能)(?:[：:](?:施加)?(充能|弹药|装填弹药|拖拽|击退|伤害|治疗|护盾|再生|点燃|剧毒|霜冻|亢奋|衰弱)\s*(\d+)?)?[）)])?$/);
-        let parsed = gate ? {type: gate[1], value: Math.max(1, Number(gate[2]) || 1), gateMode: gate[3] || '', extraType: normalizeAction(gate[4] || ''), extraValue: Math.max(1, Number(gate[5]) || 1), addon} : null;
+        let parsed = gate ? {type: gate[1], value: Math.max(1, Number(gate[2]) || 1), gateMode: gate[3] || '', extraType: normalizeAction(gate[4] || ''), extraValue: Math.max(1, Number(gate[5]) || 1), addons} : null;
         if (!parsed) {
-          const action = source.match(/^(?:施加)?(充能|能量|弹药|装填弹药|拖拽|击退|多重触发|伤害|治疗|护盾|再生|点燃|灼烧|剧毒|淬毒|霜冻|覆雪|亢奋|衰弱|攻击提升|攻击下降|防御提升|防御下降|伤害提升|暴击率提升|麻痹|封刃|禁足|推进倒计时)\s*(\d+)?$/);
-          parsed = action ? {type: normalizeAction(action[1]), value: Math.max(1, Number(action[2]) || 1), gateMode: '', extraType: '', extraValue: 1, addon} : null;
+          const action = source.match(/^(?:施加)?(充能|能量|弹药|装填弹药|拖拽|击退|爆能|倒计时|多重触发|伤害|攻击|治疗|护盾|再生|点燃|灼烧|剧毒|淬毒|霜冻|覆雪|亢奋|衰弱|攻击提升|攻击下降|防御提升|防御下降|伤害提升|点燃提升|淬毒提升|覆雪提升|护盾提升|再生提升|治疗提升|暴击率提升|麻痹|封刃|禁足|推进倒计时)\s*(\d+)?(\+?)$/);
+          if (action) {
+            const rawAction = action[1];
+            const abilityEntry = /^(伤害|攻击|点燃|剧毒|淬毒|霜冻|覆雪|护盾|治疗|再生)$/.test(rawAction);
+            parsed = {type: normalizeAction(rawAction === '攻击' ? '伤害' : rawAction), value: Math.max(1, Number(action[2]) || 1), plus: !!action[3], abilityEntry, gateMode: '', extraType: '', extraValue: 1, addons};
+          }
         }
         if (!parsed) return [];
-        return addon === '多重触发' ? [parsed, {type: '多重触发', value: addonValue, gateMode: '', extraType: '', extraValue: 1, attached: true}] : [parsed];
+        return [parsed];
       });
       if (actions.length) rules.push({id: rules.length, timing, threshold, triggerSource: match[1] || '自身', condition, conditionValue, scope, actions});
     }
     return rules;
   }
   function stripSimpleEffectRules(text) {
-    return String(text || '').replace(/(?:【(?:触发来源|来源)[：:=][^】]+】)?【(?:生命值(?:低于|下降至)[^】]+|战斗开始时|回合开始时?|回合结束时?|被攻击时|受到伤害时|使用时|使用自身携带其它技能时|使用任意技能时|造成伤害时|失去护盾|战斗胜利时|弹药耗尽时)】(?:【额外条件[：:=][^】]+】)?(?:【(?:对目标和自身|对自身|对目标|对我方全体|对敌方全体|左侧相邻技能|右侧相邻技能|灵兽自身技能|己方所有技能)】|(?:对目标和自身|对自身|对目标|对我方全体|对敌方全体|左侧相邻技能|右侧相邻技能|灵兽自身技能|己方所有技能))：[^。\n]+。?/g, ' ');
+    return String(text || '').replace(/(?:【(?:触发来源|来源)[：:=][^】]+】)?【[^】]+】(?:【额外条件[：:=][^】]+】)?(?:【(?:技能同一目标|对目标和自身|对自身|对目标|对我方全体|对敌方全体|左侧相邻技能|右侧相邻技能|左右两侧相邻技能|灵兽自身技能|己方所有技能)】|(?:技能同一目标|对目标和自身|对自身|对目标|对我方全体|对敌方全体|左侧相邻技能|右侧相邻技能|左右两侧相邻技能|灵兽自身技能|己方所有技能))：[^。\n]+。?/g, ' ');
   }
   const isAttackSkill = skill => {
     const legacy = (skill && skill.ability || '') + ' ' + (skill && (skill.legacyEffect || stripSimpleEffectRules(skill.effect)) || '') + ' ' + (skill && skill.passiveLegacyEffect || '');
-    const simpleAttack = (skill && skill.simpleRules || []).some(rule => rule.timing === '使用时' && rule.actions.some(action => /伤害|点燃|剧毒|霜冻|拖拽|击退|衰弱/.test(action.type + ' ' + (action.extraType || ''))));
+    const simpleAttack = (skill && skill.simpleRules || []).some(rule => rule.timing === '使用时' && rule.actions.some(action => /伤害|点燃|剧毒|霜冻|衰弱/.test(action.type + ' ' + (action.extraType || '')) || (action.addons || []).some(addon => /拖拽|击退/.test(addon.type))));
     return simpleAttack || /攻击\d|伤害\d|点燃|淬毒|覆雪|结霜|霜冻|造成伤害/.test(legacy);
   };
+  const isIgniteSkill = skill => !!skill && (/引火|天火咒|火球|鞭炮|妒火|热流沙/.test(skill.name) || /点燃|灼烧/.test((skill.ability || '') + ' ' + (skill.activeEffect || '') + ' ' + (skill.effect || '')));
+  const isPoisonSkill = skill => !!skill && (/毒钩|毒雾|蜈蚣锁|寒蛇影|蛇影寒|泰诺地龙|毒腺/.test(skill.name) || /淬毒|剧毒/.test((skill.ability || '') + ' ' + (skill.activeEffect || '') + ' ' + (skill.effect || '')));
+  const isFrostSkill = skill => !!skill && /覆雪|结霜|霜冻/.test((skill.name || '') + ' ' + (skill.ability || '') + ' ' + (skill.activeEffect || '') + ' ' + (skill.effect || ''));
   const PASSIVE_SKILL_NAMES = new Set(['连抓', '锋锐鳞片', '饮血倒刺']);
   const isPassiveSkill = skill => {
     if (!skill) return false;
@@ -405,6 +433,12 @@
     const size = sizeFrom({tags: tagsText, effect: activeEffect + ' ' + passiveEffect});
     const baseTier = cat.tier || '青铜';
     const activeRules = parseSimpleEffectRules(effectiveActiveEffect).map(rule => ({...rule, channel: '主动'}));
+    let activeAddons = parseActiveEffectAddons(effectiveActiveEffect);
+    if (!activeAddons.length) {
+      activeAddons = activeRules.flatMap(rule => rule.actions.flatMap(action => action.addons || [])).filter((addon, addonIndex, all) => all.findIndex(item => item.type === addon.type) === addonIndex);
+      if (activeAddons.length) activeRules.forEach(rule => rule.actions.forEach(action => { action.addons = []; }));
+    }
+    const activeAbilityManaged = activeRules.some(rule => rule.actions.some(action => action.abilityEntry));
     const passiveRules = parseSimpleEffectRules(passiveEffect).map(rule => ({...rule, triggerSource: rule.triggerSource || '自身', channel: '被动', id: rule.id + activeRules.length}));
     const simpleRules = activeRules.concat(passiveRules);
     const legacyEffect = stripSimpleEffectRules(effectiveActiveEffect);
@@ -451,10 +485,14 @@
       baseDefense: Math.max(0, Number(qualityField(cat, quality, '防御', 0)) || 0),
       ammoEnabled,
       simpleRules,
+      activeAddons,
+      activeAbilityManaged,
       simpleRuleState: {},
       entityType: 'skill',
       legacyChargeBeforeSimpleGate,
-      valueEntries: parseValueEntries(ability),
+      activeValueEntries: activeAbilityManaged ? valueEntriesFromSimpleRules(activeRules) : parseValueEntries(ability),
+      passiveValueEntries: valueEntriesFromSimpleRules(passiveRules).concat(parseValueEntries(stripSimpleEffectRules(passiveEffect))),
+      valueEntries: activeAbilityManaged ? [] : parseValueEntries(ability),
       tags: tagsText.split(/[，,、\s]+/).filter(Boolean),
       role: role || (/(攻击|伤害|点燃|淬毒|覆雪|结霜|霜冻)/.test(ability + effect) ? '输出技能' : '体系运转'),
       combo,
@@ -863,8 +901,11 @@
     return state.playerSkills.concat(state.enemySkills).find(skill => skill.id === id) || null;
   }
 
-  function valueEntriesOf(skill) {
-    return skill && Array.isArray(skill.valueEntries) ? skill.valueEntries : parseValueEntries(skill && skill.ability);
+  function valueEntriesOf(skill, channel) {
+    if (!skill) return [];
+    if (channel === 'active') return Array.isArray(skill.activeValueEntries) ? skill.activeValueEntries : (Array.isArray(skill.valueEntries) ? skill.valueEntries : parseValueEntries(skill.ability));
+    if (channel === 'passive') return Array.isArray(skill.passiveValueEntries) ? skill.passiveValueEntries : [];
+    return Array.isArray(skill.valueEntries) ? skill.valueEntries : parseValueEntries(skill.ability);
   }
 
   function valueBonusParts(skill, owner, kind) {
@@ -918,8 +959,8 @@
     return {kind: entry.kind, label: entry.label, base, attack, bonuses, value, plus: entry.plus, multiplier};
   }
 
-  function skillValueBreakdowns(skill, owner) {
-    return valueEntriesOf(skill).map(entry => valueBreakdown(skill, owner, entry));
+  function skillValueBreakdowns(skill, owner, channel) {
+    return valueEntriesOf(skill, channel).map(entry => valueBreakdown(skill, owner, entry));
   }
 
   function primaryValueBreakdown(skill, owner, kind) {
@@ -927,8 +968,8 @@
     return values.find(item => item.kind === kind) || values[0] || {kind, label: VALUE_LABELS[kind] || '数值', base: 0, attack: 0, bonuses: [], value: 0, plus: false};
   }
 
-  function valueSummary(skill, owner) {
-    return skillValueBreakdowns(skill, owner).map(item => item.label + ' ' + item.value).join(' · ') || '无直接数值';
+  function valueSummary(skill, owner, channel) {
+    return skillValueBreakdowns(skill, owner, channel).map(item => item.label + ' ' + item.value).join(' · ') || '无直接数值';
   }
 
   function valueFormula(item) {
@@ -1039,10 +1080,12 @@
       const cd = skill.baseCountdown ? skill.countdown + ' / ' + skill.baseCountdown : '—';
       const explosion = explosionLabel(skill);
       const role = /攻击|伤害|点燃|淬毒|覆雪|结霜|霜冻/.test(skill.ability + skill.effect) ? '主要输出' : /能量|装填|治疗|护甲|亢奋|防御/.test(skill.ability + skill.effect) ? '启动/扳机' : '体系运转';
-      const actualValues = valueSummary(skill, owner);
+      const activeActualValues = valueSummary(skill, owner, 'active');
+      const passiveActualValues = valueSummary(skill, owner, 'passive');
       card.innerHTML =
         '<div class="skill-card-top"><div><div class="skill-name">' + esc(skill.name) + '</div><div class="skill-owner">' + esc(owner ? owner.name : '未分配') + '</div></div><span class="skill-type">' + esc(skill.quality) + '</span></div>' +
-        '<div class="skill-actual-values"><span>当前实际数值</span><strong>' + esc(actualValues) + '</strong></div>' +
+        '<div class="skill-actual-values"><span>主动实际数值</span><strong>' + esc(activeActualValues) + '</strong></div>' +
+        '<div class="skill-actual-values passive"><span>被动实际数值</span><strong>' + esc(passiveActualValues) + '</strong></div>' +
         '<div class="skill-ability"><span>原始能力</span> ' + esc(skill.ability || '效果技能') + '</div>' +
         '<div class="skill-meta"><div class="meta-item">能力<b>' + esc(skill.ability || '效果') + '</b></div><div class="meta-item">防御<b>' + esc(skill.defense || 0) + '</b></div><div class="meta-item">范围<b>' + esc(skill.range) + '</b></div><div class="meta-item">弹药<b class="ammo">' + esc(ammo) + '</b></div><div class="meta-item">倒计时<b class="countdown">' + esc(cd) + '</b></div></div>' +
         (explosion ? '<div class="skill-explosion">' + esc(explosion) + '</div>' : '') +
@@ -1075,10 +1118,12 @@
     const unit = unitById(state.selectedId);
     if (skill) {
       const owner = ownerOf(skill);
-      const valueDetails = skillValueBreakdowns(skill, owner);
-      const valueHtml = valueDetails.length
-        ? '<div class="detail-label">当前实际数值与构成</div><div class="value-breakdown-list">' + valueDetails.map(item => '<div class="value-breakdown"><div><span>' + esc(item.label) + '</span><strong>' + item.value + '</strong></div><p>' + esc(valueFormula(item)) + '</p></div>').join('') + '</div>'
-        : '';
+      const activeValueDetails = skillValueBreakdowns(skill, owner, 'active');
+      const passiveValueDetails = skillValueBreakdowns(skill, owner, 'passive');
+      const valueSection = (label, values) => '<div class="detail-label">' + label + '</div>' + (values.length
+        ? '<div class="value-breakdown-list">' + values.map(item => '<div class="value-breakdown"><div><span>' + esc(item.label) + '</span><strong>' + item.value + '</strong></div><p>' + esc(valueFormula(item)) + '</p></div>').join('') + '</div>'
+        : '<p class="detail-empty">无可直接计算的数值</p>');
+      const valueHtml = valueSection('主动实际数值与构成', activeValueDetails) + valueSection('被动实际数值与构成', passiveValueDetails);
       detail.innerHTML =
         '<div class="focus-card"><div class="focus-top"><div class="focus-icon skill">' + esc(skill.name.slice(0, 1)) + '</div><div><div class="focus-name">' + esc(skill.name) + '</div><div class="focus-sub">' + esc(skill.quality) + ' · ' + esc(SIZE_LABEL[skill.size]) + ' · 所属 ' + esc(owner ? owner.name : '未分配') + '</div></div></div><p class="focus-effect"><strong>主动效果：</strong>' + esc(skill.activeEffect || '无') + '<br><strong>被动效果：</strong>' + esc(skill.passiveEffect || '无') + '</p></div>' +
         valueHtml +
@@ -1127,12 +1172,15 @@
     }
     const owner = ownerOf(skill);
     const explosion = explosionLabel(skill);
-    const valueDetails = skillValueBreakdowns(skill, owner);
+    const activeValueDetails = skillValueBreakdowns(skill, owner, 'active');
+    const passiveValueDetails = skillValueBreakdowns(skill, owner, 'passive');
+    const modalValueSection = (label, values) => '<div class="detail-label">' + label + '</div>' + (values.length ? '<div class="value-breakdown-list">' + values.map(item => '<div class="value-breakdown"><div><span>' + esc(item.label) + '</span><strong>' + item.value + '</strong></div><p>' + esc(valueFormula(item)) + '</p></div>').join('') + '</div>' : '<p class="detail-empty">无可直接计算的数值</p>');
     $('#skill-info-title').textContent = skill.name + ' · 技能详情';
     $('#skill-info-content').innerHTML =
       '<div class="skill-info-summary"><div class="focus-icon skill">' + esc(skill.name.slice(0, 1)) + '</div><div><strong>' + esc(skill.name) + '</strong><small>' + esc(skill.quality) + ' · ' + esc(SIZE_LABEL[skill.size]) + ' · 所属灵宠：' + esc(owner ? owner.name : '未分配') + '</small></div></div>' +
       '<p class="skill-info-effect"><strong>主动效果：</strong>' + esc(skill.activeEffect || '无') + '<br><strong>被动效果：</strong>' + esc(skill.passiveEffect || '无') + '</p>' +
-      (valueDetails.length ? '<div class="detail-label">当前实际数值与构成</div><div class="value-breakdown-list">' + valueDetails.map(item => '<div class="value-breakdown"><div><span>' + esc(item.label) + '</span><strong>' + item.value + '</strong></div><p>' + esc(valueFormula(item)) + '</p></div>').join('') + '</div>' : '') +
+      modalValueSection('主动实际数值与构成', activeValueDetails) +
+      modalValueSection('被动实际数值与构成', passiveValueDetails) +
       '<div class="skill-info-grid"><div><span>能力</span><b>' + esc(skill.ability || '效果技能') + '</b></div><div><span>防御</span><b>' + esc(skill.defense || 0) + '</b></div><div><span>攻击范围</span><b>' + esc(skill.range) + '</b></div><div><span>占用格数</span><b>' + skill.slots + ' 格</b></div><div><span>弹药</span><b>' + esc(skill.ammoMax ? skill.ammo + ' / ' + skill.ammoMax : '-/-') + '</b></div><div><span>倒计时</span><b>' + esc(skill.baseCountdown ? skill.countdown + ' / ' + skill.baseCountdown : '—') + '</b></div><div><span>爆能消耗</span><b>' + esc(explosion || '—') + '</b></div></div>' +
       '<div class="detail-label">技能标签</div><div class="tag-row">' + (skill.tags.length ? skill.tags : ['技能']).map(tag => '<span class="tag">' + esc(tag) + '</span>').join('') + '</div>';
     modal.hidden = false;
@@ -1159,6 +1207,68 @@
     $('#damage-total').textContent = state.damage;
     $('#event-total').textContent = state.events;
     $('#round-log-count').textContent = state.roundEvents;
+  }
+
+  function combatLogText() {
+    const header = [
+      '灵宠战斗模拟器 · 战斗日志',
+      '当前状态：第' + state.round + '回合 · ' + sideLabel(state.side) + '回合',
+      '累计伤害：' + state.damage + ' · 触发事件：' + state.events,
+      '=================================================='
+    ];
+    if (!state.logs.length) return header.concat(['暂无战斗事件']).join('\n');
+    const scratch = document.createElement('div');
+    const entries = state.logs.map(entry => {
+      scratch.innerHTML = entry.text || '';
+      const plain = (scratch.textContent || '').replace(/\s+/g, ' ').trim();
+      return '[R' + entry.round + ' · STEP ' + (entry.action || '—') + '] [' + (entry.meta || entry.kind || 'LOG') + '] ' + plain;
+    });
+    return header.concat(entries).join('\n');
+  }
+
+  function openLogText() {
+    const output = $('#log-text-output');
+    const modal = $('#log-text-modal');
+    if (!output || !modal) return;
+    output.value = combatLogText();
+    modal.hidden = false;
+    output.focus();
+  }
+
+  function closeLogText() {
+    const modal = $('#log-text-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function copyLogTextFallback(output) {
+    output.focus();
+    output.select();
+    const copied = document.execCommand('copy');
+    if (copied) showToast('战斗日志文本已复制');
+    else showToast('复制失败，请手动选择文本', true);
+  }
+
+  function copyLogText() {
+    const output = $('#log-text-output');
+    if (!output) return;
+    const text = output.value;
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => showToast('战斗日志文本已复制')).catch(() => copyLogTextFallback(output));
+    } else copyLogTextFallback(output);
+  }
+
+  function downloadLogText() {
+    const text = combatLogText();
+    const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '灵宠战斗日志-R' + state.round + '.txt';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    showToast('战斗日志文本已下载');
   }
 
   function renderTrace() {
@@ -1197,12 +1307,14 @@
     $$('.cell.range,.cell.move-target,.unit.in-range').forEach(node => node.classList.remove('range', 'move-target', 'in-range'));
   }
 
-  function triggerFrostOnMove(unit, reason) {
+  function triggerFrostOnMove(unit, reason, eventSource) {
     if (!unit || unit.dead || unit.hp <= 0 || unit.frost <= 0) return;
     const before = unit.frost;
     const damage = before * 2;
     log('<strong>' + esc(unit.name) + '</strong> 因' + esc(reason || '位置改变') + '触发霜冻：层数 ' + logValue('frost', before) + '，造成 ' + logValue('frost', damage) + ' 点霜冻伤害。', 'trigger', 'FROST MOVE');
-    damageUnit(null, unit, damage, {status:'霜冻', meta:'FROST MOVE'});
+    const frostSource = eventSource || unit.frostEventSource;
+    const source = frostSource && frostSource.entityType === 'skill' ? ownerOf(frostSource) : frostSource;
+    damageUnit(source || null, unit, damage, {status:'霜冻', meta:'FROST MOVE', skillSource:frostSource});
     unit.frost = Math.ceil(before / 2);
     log('<strong>' + esc(unit.name) + '</strong> 霜冻触发后层数减半：' + logValue('frost', before) + ' → ' + logValue('frost', unit.frost) + '（向上取整）。', 'trigger', 'FROST MOVE');
     trace(unit.name + ' 霜冻 ' + before + '→' + unit.frost, 'trigger');
@@ -1213,7 +1325,7 @@
     const old = unit.pos.slice();
     unit.pos = position.slice();
     if (typeof options.message === 'function') log(options.message(old, unit.pos), 'trigger', options.meta || 'MOVE');
-    if (!options.skipFrost) triggerFrostOnMove(unit, options.reason || '位置改变');
+    if (!options.skipFrost) triggerFrostOnMove(unit, options.reason || '位置改变', options.eventSource);
     return true;
   }
 
@@ -1342,6 +1454,7 @@
       moveUnit(target, candidate, {
         reason: skill.name + actionText,
         meta: 'DISPLACEMENT',
+        eventSource: skill,
         message: (old, next) => '<strong>' + esc(skill.name) + '</strong> ' + actionText + ' <strong>' + esc(target.name) + '</strong>：' + coord(old) + ' → ' + coord(next) + '。'
       });
       trace(target.name + ' ' + actionText + '至 ' + coord(candidate), 'trigger');
@@ -1349,7 +1462,7 @@
     }
     const value = Math.max(0, Math.round(damageAmount || 0));
     log('<strong>' + esc(skill.name) + '</strong> 无空格可将 <strong>' + esc(target.name) + '</strong> ' + actionText + '一格，追加造成等量伤害 <strong>' + value + '</strong>。', 'warn', 'DISPLACEMENT');
-    if (value > 0 && target.hp > 0 && !target.dead) damageUnit(owner, target, value, {attackHit:true, meta:'DISPLACEMENT DAMAGE'});
+    if (value > 0 && target.hp > 0 && !target.dead) damageUnit(owner, target, value, {attackHit:true, meta:'DISPLACEMENT DAMAGE', skillSource:skill});
   }
 
   function reorderSkills(fromId, toId) {
@@ -1373,45 +1486,87 @@
     state.bannerTimer = setTimeout(() => { node.hidden = true; }, 900);
   }
 
-  function addEnergy(unit, amount, reason) {
+  function addEnergy(unit, amount, reason, eventSource) {
     if (!unit || unit.dead || !amount) return;
     const before = unit.energy;
     unit.energy = Math.max(0, unit.energy + amount);
     const actual = unit.energy - before;
-    if (actual) log('<strong>' + esc(unit.name) + '</strong> ' + esc(reason || '获得能量') + ' <strong>+' + actual + '</strong>，当前 ' + unit.energy + '。', 'trigger', 'ENERGY');
+    if (actual) {
+      log('<strong>' + esc(unit.name) + '</strong> ' + esc(reason || '获得能量') + ' <strong>+' + actual + '</strong>，当前 ' + unit.energy + '。', 'trigger', 'ENERGY');
+      const source = eventSource || unit;
+      emitPassiveEffectPair(actual > 0 ? '能量增加' : '能量减少', source.entityType === 'skill' ? ownerOf(source) : source, unit, source);
+    }
   }
 
-  function consumeEnergy(unit, amount, reason) {
+  function consumeEnergy(unit, amount, reason, eventSource) {
     if (!unit || unit.energy < amount) return false;
     unit.energy -= amount;
     log('<strong>' + esc(unit.name) + '</strong> 消耗 <strong>' + amount + '</strong> 点能量' + (reason ? '，' + esc(reason) : '') + '。', 'trigger', 'ENERGY');
+    const source = eventSource || unit;
+    emitPassiveEffectPair('能量减少', source.entityType === 'skill' ? ownerOf(source) : source, unit, source);
     return true;
   }
 
-  function applyBuff(unit, field, amount, label) {
-    if (!unit || unit.dead) return 0;
-    let value = amount;
-    if (unit.weak > 0) value = Math.floor(value / 2);
-    if (unit.excited > 0) {
-      value *= 2;
-      unit.excited -= 1;
+  function adjustValueForStatus(unit, amount, direction, label) {
+    let value = Math.max(0, Math.round(Number(amount) || 0));
+    if (!unit || !value) return value;
+    const consumed = [];
+    if (direction === 'increase') {
+      if (unit.weak > 0) {
+        value = Math.floor(value / 2);
+        unit.weak -= 1;
+        consumed.push('衰弱 -1');
+      }
+      if (unit.excited > 0) {
+        value *= 2;
+        unit.excited -= 1;
+        consumed.push('亢奋 -1');
+      }
+    } else {
+      if (unit.excited > 0) {
+        value = Math.floor(value / 2);
+        unit.excited -= 1;
+        consumed.push('亢奋 -1');
+      }
+      if (unit.weak > 0) {
+        value *= 2;
+        unit.weak -= 1;
+        consumed.push('衰弱 -1');
+      }
     }
-    unit[field] = Math.max(0, unit[field] + value);
-    log('<strong>' + esc(unit.name) + '</strong> 获得' + esc(label) + ' <strong>+' + value + '</strong>。', 'trigger', 'BUFF');
+    if (consumed.length) {
+      log('<strong>' + esc(unit.name) + '</strong> 的' + esc(label || '数值') + (direction === 'increase' ? '提升' : '降低') + '触发 ' + consumed.join('、') + '。', 'trigger', 'STATUS');
+    }
     return value;
   }
 
-  function applyDebuff(unit, field, amount, label) {
+  function applyNumericChange(unit, field, amount, label, eventSource, options) {
     if (!unit || unit.dead) return 0;
-    let value = amount;
-    if (unit.excited > 0) value = Math.floor(value / 2);
-    if (unit.weak > 0) {
-      value *= 2;
-      unit.weak -= 1;
-    }
-    unit[field] = Math.max(0, unit[field] + value);
-    log('<strong>' + esc(unit.name) + '</strong> 获得' + esc(label) + ' <strong>+' + value + '</strong>。', 'warn', 'DEBUFF');
-    return value;
+    const requested = Math.round(Number(amount) || 0);
+    if (!requested) return 0;
+    const direction = requested > 0 ? 'increase' : 'decrease';
+    const value = options && options.bypassStatus
+      ? Math.abs(requested)
+      : adjustValueForStatus(unit, Math.abs(requested), direction, label || field);
+    const before = Number(unit[field]) || 0;
+    const delta = direction === 'increase' ? value : -value;
+    unit[field] = Math.max(0, before + delta);
+    const actual = unit[field] - before;
+    const actualText = actual > 0 ? '+' + actual : String(actual);
+    log('<strong>' + esc(unit.name) + '</strong> ' + esc(label || field) + ' ' + (direction === 'increase' ? '提升' : '降低') + ' <strong>' + actualText + '</strong>' + (actual !== delta ? '（已受数值上限限制）' : '') + '。', direction === 'increase' ? 'trigger' : 'warn', direction === 'increase' ? 'BUFF' : 'DEBUFF');
+    const source = eventSource || unit;
+    const cause = ({atk:'攻击', def:'防御', shield:'护盾', damageBonus:'伤害', burnBonus:'点燃', poisonBonus:'淬毒', frostBonus:'覆雪', shieldBonus:'护盾', regenBonus:'再生', healBonus:'治疗'})[field] || '数值';
+    const causeText = cause + (direction === 'increase' ? '提升' : '降低');
+    emitPassiveEffectPair(causeText, source.entityType === 'skill' ? ownerOf(source) : source, unit, source);
+    return actual;
+  }
+
+  function applyBuff(unit, field, amount, label, eventSource, options) {
+    return applyNumericChange(unit, field, Number(amount) || 0, label, eventSource, options);
+  }
+
+  function applyDebuff(unit, field, amount, label, eventSource, options) {
+    return applyNumericChange(unit, field, -Math.abs(Number(amount) || 0), label, eventSource, options);
   }
 
   function valueFromEffect(text, patterns, fallback = 0) {
@@ -1422,14 +1577,23 @@
     return valueFromEffect(skill && skill.effect, [pattern], fallback);
   }
 
-  function addSkillGrowth(skill, field, amount, reason) {
+  function addSkillGrowth(skill, field, amount, reason, eventSource, options) {
     if (!skill || !amount) return;
-    skill[field] = (skill[field] || 0) + amount;
-    const growthKind = field === 'damageBonus' ? 'damage' : field === 'burnBonus' ? 'burn' : field === 'poisonBonus' ? 'poison' : field === 'frostBonus' ? 'frost' : field === 'shieldBonus' || field === 'healBonus' || field === 'regenBonus' ? 'heal' : null;
-    const amountText = growthKind ? logValue(growthKind, '+' + amount) : '<strong>+' + amount + '</strong>';
+    const growthKind = ({damageBonus:'damage', burnBonus:'burn', poisonBonus:'poison', frostBonus:'frost', shieldBonus:'shield', healBonus:'heal', regenBonus:'regen'})[field] || null;
+    const growthOwner = ownerOf(skill);
+    const adjustedAmount = growthKind && growthOwner && !(options && options.bypassStatus)
+      ? adjustValueForStatus(growthOwner, amount, 'increase', VALUE_LABELS[growthKind] || '数值')
+      : Math.max(0, Math.round(Number(amount) || 0));
+    skill[field] = (skill[field] || 0) + adjustedAmount;
+    const amountText = growthKind ? logValue(growthKind, '+' + adjustedAmount) : '<strong>+' + adjustedAmount + '</strong>';
     const totalText = growthKind ? logValue(growthKind, '+' + skill[field]) : '<strong>+' + skill[field] + '</strong>';
     log('<strong>' + esc(skill.name) + '</strong> ' + esc(reason || '获得成长') + ' ' + amountText + '，当前 ' + totalText + '。', 'trigger', 'GROWTH');
-    trace(skill.name + ' ' + field + ' +' + amount, 'trigger');
+    trace(skill.name + ' ' + field + ' +' + adjustedAmount, 'trigger');
+    const baseCause = ({damageBonus:'伤害', critBonus:'暴击', defBonus:'防御', atkBonus:'攻击', burnBonus:'点燃', poisonBonus:'淬毒', frostBonus:'覆雪', shieldBonus:'护盾', regenBonus:'再生', healBonus:'治疗'})[field];
+    if (baseCause) {
+      const source = eventSource || skill;
+      emitPassiveEffectPair(baseCause + (adjustedAmount > 0 ? '提升' : '降低'), source.entityType === 'skill' ? ownerOf(source) : source, skill, source);
+    }
   }
 
   function triggerStatusGrowth(kind, source, target) {
@@ -1468,22 +1632,46 @@
     });
   }
 
-  function applyExcited(source, target, amount, reason) {
+  function applyExcited(source, target, amount, reason, eventSource) {
     if (!target || target.dead || !amount) return 0;
-    const value = Math.max(0, Math.round(amount));
+    let value = Math.max(0, Math.round(amount));
+    const cancelled = Math.min(target.weak, value);
+    if (cancelled) {
+      target.weak -= cancelled;
+      value -= cancelled;
+      log('<strong>' + esc(target.name) + '</strong> 的亢奋抵消衰弱 ' + cancelled + ' 层，当前衰弱 ' + target.weak + '。', 'trigger', 'STATUS CANCEL');
+    }
+    if (!value) {
+      trace(target.name + ' 亢奋抵消衰弱', 'trigger');
+      return 0;
+    }
     target.excited += value;
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得亢奋 +' + value + '，当前 ' + target.excited + '。', 'trigger', 'STATUS');
     trace(target.name + ' 亢奋 +' + value, 'trigger');
+    const causeSource = eventSource || source || target;
+    emitPassiveEffectPair('亢奋', causeSource.entityType === 'skill' ? ownerOf(causeSource) : causeSource, target, causeSource);
     triggerStatusGrowth('excited', source, target);
     return value;
   }
 
-  function applyWeak(source, target, amount, reason) {
+  function applyWeak(source, target, amount, reason, eventSource) {
     if (!target || target.dead || !amount) return 0;
-    const value = Math.max(0, Math.round(amount));
+    let value = Math.max(0, Math.round(amount));
+    const cancelled = Math.min(target.excited, value);
+    if (cancelled) {
+      target.excited -= cancelled;
+      value -= cancelled;
+      log('<strong>' + esc(target.name) + '</strong> 的衰弱抵消亢奋 ' + cancelled + ' 层，当前亢奋 ' + target.excited + '。', 'trigger', 'STATUS CANCEL');
+    }
+    if (!value) {
+      trace(target.name + ' 衰弱抵消亢奋', 'trigger');
+      return 0;
+    }
     target.weak += value;
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得衰弱 +' + value + '，当前 ' + target.weak + '。', 'warn', 'STATUS');
     trace(target.name + ' 衰弱 +' + value, 'trigger');
+    const causeSource = eventSource || source || target;
+    emitPassiveEffectPair('衰弱', causeSource.entityType === 'skill' ? ownerOf(causeSource) : causeSource, target, causeSource);
     triggerStatusGrowth('weak', source, target);
     if (source && source.side) {
       skillList(source.side).filter(skill => skill.name === '尾鞭' && skill.owner === source.id).forEach(skill => {
@@ -1494,7 +1682,7 @@
     return value;
   }
 
-  const SIMPLE_SKILL_SCOPES = new Set(['左侧相邻技能', '右侧相邻技能', '灵兽自身技能', '己方所有技能']);
+  const SIMPLE_SKILL_SCOPES = new Set(['左侧相邻技能', '右侧相邻技能', '左右两侧相邻技能', '灵兽自身技能', '己方所有技能']);
 
   function simpleRuleSkillTargets(source, owner, scope) {
     const skills = skillList(owner.side);
@@ -1503,6 +1691,7 @@
     if (source.entityType !== 'skill') return [];
     const index = skills.indexOf(source);
     if (index < 0) return [];
+    if (scope === '左右两侧相邻技能') return [skills[index - 1], skills[index + 1]].filter(Boolean);
     const target = scope === '左侧相邻技能' ? skills[index - 1] : scope === '右侧相邻技能' ? skills[index + 1] : null;
     return target ? [target] : [];
   }
@@ -1513,6 +1702,9 @@
       return Array.from(new Map(owners.filter(target => target && !target.dead && target.hp > 0).map(target => [target.id, target])).values());
     }
     const context = (contextTargets || []).filter(target => target && !target.dead && target.hp > 0);
+    if (scope === '技能同一目标') {
+      return Array.from(new Map(context.map(target => [target.id, target])).values());
+    }
     let selected = context;
     if (!selected.length && source.entityType === 'skill') {
       selected = source.rangeConfig ? structuredTargetsFor(source, owner) : targetsFor(source, owner, owner.side);
@@ -1530,7 +1722,7 @@
     return Array.from(new Map(targets.filter(target => target && !target.dead && target.hp > 0).map(target => [target.id, target])).values());
   }
 
-  function addSimpleAmmo(skills, amount, sourceName) {
+  function addSimpleAmmo(skills, amount, sourceEntity) {
     const unique = Array.from(new Map((skills || []).filter(Boolean).map(skill => [skill.id, skill])).values());
     let changed = 0;
     unique.forEach(skill => {
@@ -1538,17 +1730,47 @@
       const before = skill.ammo;
       skill.ammo = Math.min(skill.ammoMax, skill.ammo + amount);
       changed += skill.ammo - before;
+      if (skill.ammo > before) {
+        const targetOwner = ownerOf(skill);
+        const sourceOwner = sourceEntity && sourceEntity.entityType === 'skill' ? ownerOf(sourceEntity) : sourceEntity;
+        emitPassiveEffectPair('装填弹药', sourceOwner || targetOwner, targetOwner, sourceEntity || targetOwner);
+      }
     });
-    log('<strong>' + esc(sourceName) + '</strong> 为 ' + unique.length + ' 个技能装填弹药，共补充 ' + changed + ' 枚。', 'trigger', 'SIMPLE EFFECT');
+    log('<strong>' + esc(sourceEntity && sourceEntity.name || '简化效果') + '</strong> 为 ' + unique.length + ' 个技能装填弹药，共补充 ' + changed + ' 枚。', 'trigger', 'SIMPLE EFFECT');
+  }
+
+  function simpleActionValue(source, owner, action) {
+    const base = Math.max(0, Number(action && action.value) || 0);
+    if (!action) return base;
+    const kind = ({伤害:'damage', 攻击:'damage', 点燃:'burn', 灼烧:'burn', 剧毒:'poison', 淬毒:'poison', 霜冻:'frost', 覆雪:'frost'})[action.type];
+    let value = base;
+    if (action.plus && owner) {
+      if (kind === 'burn' || kind === 'poison' || kind === 'frost') {
+        const ratio = source && source.size === 'long' ? 3 : source && source.size === 'medium' ? 2 : 1;
+        value += owner.atk > 0 ? Math.ceil(owner.atk * ratio / 4) : 0;
+      } else value += Math.max(0, Math.round(owner.atk));
+    }
+    if (kind && typeof valueBonusParts === 'function') value += valueBonusParts(source, owner, kind).reduce((sum, part) => sum + part.value, 0);
+    return Math.max(kind === 'burn' || kind === 'poison' || kind === 'frost' ? 1 : 0, value);
   }
 
   function executeSimpleAction(source, owner, rule, action, contextTargets, repeats) {
+    const actionValue = simpleActionValue(source, owner, action);
+    const growthField = ({伤害提升:'damageBonus', 点燃提升:'burnBonus', 淬毒提升:'poisonBonus', 覆雪提升:'frostBonus', 护盾提升:'shieldBonus', 再生提升:'regenBonus', 治疗提升:'healBonus'})[action.type];
+    if (growthField) {
+      const targets = SIMPLE_SKILL_SCOPES.has(rule.scope)
+        ? simpleRuleSkillTargets(source, owner, rule.scope)
+        : simpleRuleTargets(source, owner, rule.scope, contextTargets).flatMap(target => skillList(target.side).filter(skill => skill.owner === target.id));
+      if (!targets.length) return false;
+      for (let repeat = 0; repeat < repeats; repeat += 1) targets.forEach(skill => addSkillGrowth(skill, growthField, actionValue, source.name + '·' + rule.timing, source));
+      return true;
+    }
     if (action.type === '装填弹药') {
       const targets = SIMPLE_SKILL_SCOPES.has(rule.scope)
         ? simpleRuleSkillTargets(source, owner, rule.scope)
         : simpleRuleTargets(source, owner, rule.scope, contextTargets).flatMap(target => skillList(target.side).filter(skill => skill.owner === target.id));
       if (!targets.length) return false;
-      for (let repeat = 0; repeat < repeats; repeat += 1) addSimpleAmmo(targets, action.value, source.name);
+      for (let repeat = 0; repeat < repeats; repeat += 1) addSimpleAmmo(targets, actionValue, source);
       return true;
     }
     const targets = simpleRuleTargets(source, owner, rule.scope, contextTargets);
@@ -1557,29 +1779,32 @@
       targets.slice().forEach(target => {
         if (!target || target.dead || target.hp <= 0) return;
         const reason = source.name + '·' + rule.timing;
-        if (action.type === '充能') addEnergy(target, action.value, reason + '充能');
-        else if (action.type === '伤害') damageUnit(owner, target, action.value, {attackHit: rule.timing === '使用时', skipRetaliation: rule.timing === '被攻击时', meta:'SIMPLE EFFECT'});
-        else if (action.type === '治疗') healUnit(owner, target, action.value, reason);
-        else if (action.type === '护盾') applyShield(source.entityType === 'skill' ? source : null, target, action.value, reason);
-        else if (action.type === '再生') applyRegen(owner, target, action.value, reason);
-        else if (action.type === '点燃') applyBurn(owner, target, action.value, reason, owner.name === '花椒蟹');
-        else if (action.type === '剧毒') applyPoison(owner, target, action.value, reason);
-        else if (action.type === '霜冻') applyFrost(owner, target, action.value, reason);
-        else if (action.type === '亢奋') applyExcited(owner, target, action.value, reason);
-        else if (action.type === '衰弱') applyWeak(owner, target, action.value, reason);
-        else if (action.type === '麻痹') applyParalyze(owner, target, action.value, reason);
-        else if (action.type === '封刃') applySilence(owner, target, action.value, reason);
-        else if (action.type === '禁足') applyRoot(owner, target, action.value, reason);
-        else if (action.type === '攻击提升') applyBuff(target, 'atk', action.value, reason);
-        else if (action.type === '攻击下降') applyBuff(target, 'atk', -action.value, reason);
-        else if (action.type === '防御提升') applyBuff(target, 'def', action.value, reason);
-        else if (action.type === '防御下降') applyBuff(target, 'def', -action.value, reason);
-        else if (action.type === '伤害提升') {
-          if (target.entityType === 'skill') addSkillGrowth(target, 'damageBonus', action.value, reason);
-          else target.skillDamage = (target.skillDamage || 0) + action.value;
+        const offensiveHit = rule.timing === '使用时' && source.entityType === 'skill' && target.side !== owner.side && isAttackSkill(source);
+        if (offensiveHit && (action.type === '伤害' || action.type === '攻击' || action.type === '点燃' || action.type === '灼烧' || action.type === '剧毒' || action.type === '淬毒' || action.type === '霜冻' || action.type === '覆雪')) {
+          triggerBurnOnHit(owner, target, source, actionValue);
         }
-        else if (action.type === '暴击率提升') target.critBonus = (target.critBonus || 0) + action.value;
-        else if (action.type === '推进倒计时' && target.entityType === 'skill') reduceCountdown(target, action.value, reason);
+        if (action.type === '充能') addEnergy(target, actionValue, reason + '充能', source);
+        else if (action.type === '伤害' || action.type === '攻击') damageUnit(owner, target, actionValue, {attackHit: rule.timing === '使用时', skipRetaliation: rule.timing === '被攻击时', meta:'SIMPLE EFFECT', skillSource:source});
+        else if (action.type === '治疗') healUnit(owner, target, actionValue, reason, source);
+        else if (action.type === '护盾') applyShield(source.entityType === 'skill' ? source : null, target, actionValue, reason, source);
+        else if (action.type === '再生') applyRegen(owner, target, actionValue, reason, source);
+        else if (action.type === '点燃' || action.type === '灼烧') applyBurn(owner, target, actionValue, reason, owner.name === '花椒蟹', source, {canIgnite: isIgniteSkill(source)});
+        else if (action.type === '剧毒' || action.type === '淬毒') applyPoison(owner, target, actionValue, reason, source, {canDetonate: isPoisonSkill(source)});
+        else if (action.type === '霜冻' || action.type === '覆雪') applyFrost(owner, target, actionValue, reason, source);
+        else if (action.type === '亢奋') applyExcited(owner, target, actionValue, reason, source);
+        else if (action.type === '衰弱') applyWeak(owner, target, actionValue, reason, source);
+        else if (action.type === '麻痹') applyParalyze(owner, target, actionValue, reason, source);
+        else if (action.type === '封刃') applySilence(owner, target, actionValue, reason, source);
+        else if (action.type === '禁足') applyRoot(owner, target, actionValue, reason, source);
+        else if (action.type === '攻击提升') applyBuff(target, 'atk', actionValue, reason, source);
+        else if (action.type === '攻击下降') applyDebuff(target, 'atk', actionValue, reason, source);
+        else if (action.type === '防御提升') applyBuff(target, 'def', actionValue, reason, source);
+        else if (action.type === '防御下降') applyDebuff(target, 'def', actionValue, reason, source);
+        else if (action.type === '暴击率提升') {
+          target.critBonus = (target.critBonus || 0) + actionValue;
+          emitPassiveEffectPair('暴击提升', owner, target, source);
+        }
+        else if (action.type === '推进倒计时' && target.entityType === 'skill') reduceCountdown(target, actionValue, reason);
         else if (action.type === '拖拽') resolveDisplacement(source, owner, target, 'pull', 0);
         else if (action.type === '击退') resolveDisplacement(source, owner, target, 'push', 0);
       });
@@ -1589,7 +1814,7 @@
 
   function resolveSimpleGate(source, owner, rule, action, actionIndex) {
     if (action.type === '爆能') {
-      const ready = consumeEnergy(owner, action.value, source.name + '简化效果爆能');
+      const ready = consumeEnergy(owner, action.value, source.name + '简化效果爆能', source);
       if (!ready) log('<strong>' + esc(source.name) + '</strong> 的' + esc(rule.timing) + '效果需要爆能' + action.value + '，能量不足。', 'warn', 'SIMPLE EXPLOSION');
       return ready;
     }
@@ -1601,28 +1826,66 @@
     return next === 0;
   }
 
+  function simpleActionAddons(source, rule, action) {
+    const scoped = rule && rule.channel === '主动' && source && Array.isArray(source.activeAddons) ? source.activeAddons : (action && Array.isArray(action.addons) ? action.addons : []);
+    return scoped.filter((addon, index, all) => all.findIndex(item => item.type === addon.type) === index);
+  }
+
+  function executeSimpleDisplacementAddons(source, owner, rule, addons, contextTargets, repeats) {
+    const movement = (addons || []).filter(addon => addon.type === '拖拽' || addon.type === '击退');
+    if (!movement.length) return false;
+    const targets = simpleRuleTargets(source, owner, rule.scope, contextTargets).filter(target => target.side !== owner.side);
+    if (!targets.length) return false;
+    for (let repeat = 0; repeat < repeats; repeat += 1) {
+      movement.forEach(addon => targets.slice().forEach(target => resolveDisplacement(source, owner, target, addon.type === '拖拽' ? 'pull' : 'push', 0)));
+    }
+    return true;
+  }
+
   function executeSimpleRule(source, owner, rule, contextTargets) {
-    const multi = rule.actions.find(action => action.type === '多重触发');
-    const repeats = Math.max(1, Math.min(99, multi ? multi.value : 1));
+    const legacyMulti = rule.actions.find(action => action.type === '多重触发');
     const legacyGates = rule.actions.map((action, index) => ({action, index})).filter(entry => /爆能|倒计时/.test(entry.action.type) && !entry.action.gateMode);
     if (legacyGates.some(entry => !resolveSimpleGate(source, owner, rule, entry.action, entry.index))) return {allowBase: true};
     let allowBase = true;
     let executed = false;
+    let maxRepeats = 1;
     for (let index = 0; index < rule.actions.length; index += 1) {
       const action = rule.actions[index];
+      const addons = simpleActionAddons(source, rule, action);
+      const multi = addons.find(addon => addon.type === '多重触发');
+      const repeats = Math.max(1, Math.min(99, multi ? multi.value : legacyMulti ? legacyMulti.value : 1));
+      maxRepeats = Math.max(maxRepeats, repeats);
       if (action.type === '多重触发' || (/爆能|倒计时/.test(action.type) && !action.gateMode)) continue;
+      let actionExecuted = false;
+      const applyBreakShell = candidate => {
+        if (!candidate || candidate.type !== '伤害' || !addons.some(addon => addon.type === '破壳') || !source || source.entityType !== 'skill' || !owner || owner.shield <= 0) return candidate;
+        const lostShield = owner.shield;
+        owner.shield = 0;
+        source.simpleBreakShellApplied = true;
+        log('<strong>' + esc(source.name) + '</strong> 破壳附加：移除 ' + logValue('shield', lostShield) + ' 点当前护盾，本项目附加 ' + logValue('damage', lostShield * 2) + ' 点伤害。', 'trigger', 'BREAKSHELL');
+        return {...candidate, value: (Number(candidate.value) || 0) + lostShield * 2};
+      };
       if (/爆能|倒计时/.test(action.type)) {
         const ready = resolveSimpleGate(source, owner, rule, action, index);
         if (action.gateMode === '应用于此技能') {
           if (!ready) { allowBase = false; break; }
         } else if (ready && action.extraType) {
-          executed = executeSimpleAction(source, owner, rule, {type: action.extraType, value: action.extraValue}, contextTargets, repeats) || executed;
+          actionExecuted = executeSimpleAction(source, owner, rule, applyBreakShell({type: action.extraType, value: action.extraValue}), contextTargets, repeats);
         }
-        continue;
+      } else {
+        if (rule.channel === '被动' && addons.some(addon => addon.type === '暴击率') && source.entityType === 'skill') {
+          const crit = addons.find(addon => addon.type === '暴击率');
+          const before = source.critBonus || 0;
+          source.critBonus = before + Math.max(0, Number(crit.value) || 0);
+          triggerCritical(owner, source, simpleRuleTargets(source, owner, rule.scope, contextTargets));
+          source.critBonus = before;
+        }
+        actionExecuted = executeSimpleAction(source, owner, rule, applyBreakShell(action), contextTargets, repeats);
       }
-      executed = executeSimpleAction(source, owner, rule, action, contextTargets, repeats) || executed;
+      if (actionExecuted && rule.channel === '被动') actionExecuted = executeSimpleDisplacementAddons(source, owner, rule, addons, contextTargets, repeats) || actionExecuted;
+      executed = actionExecuted || executed;
     }
-    if (executed) log('<strong>' + esc(source.name) + '</strong> 完成' + esc(rule.timing) + '简化效果' + (repeats > 1 ? '，共触发 ' + repeats + ' 次' : '') + '。', 'trigger', 'SIMPLE EFFECT');
+    if (executed) log('<strong>' + esc(source.name) + '</strong> 完成' + esc(rule.timing) + '简化效果' + (maxRepeats > 1 ? '，共触发 ' + maxRepeats + ' 次' : '') + '。', 'trigger', 'SIMPLE EFFECT');
     return {allowBase};
   }
 
@@ -1639,11 +1902,12 @@
     if (wanted === '敌方') return candidateSide !== owner.side;
     if (wanted === '自身携带技能') return candidate.entityType === 'skill' && candidate.owner === owner.id;
     if (wanted === '友方所有技能') return candidate.entityType === 'skill' && candidateSide === owner.side && candidate.owner !== owner.id;
-    if (wanted === '左侧相邻技能' || wanted === '右侧相邻技能') {
+    if (wanted === '左侧相邻技能' || wanted === '右侧相邻技能' || wanted === '左右两侧相邻技能') {
       if (!source || source.entityType !== 'skill' || candidate.entityType !== 'skill') return false;
       const bar = skillList(owner.side);
       const sourceIndex = bar.indexOf(source);
       const candidateIndex = bar.indexOf(candidate);
+      if (wanted === '左右两侧相邻技能') return Math.abs(candidateIndex - sourceIndex) === 1;
       return candidateIndex === sourceIndex + (wanted === '左侧相邻技能' ? -1 : 1);
     }
     return true;
@@ -1653,7 +1917,7 @@
     const condition = rule && rule.condition ? rule.condition : '无条件';
     const amount = Math.max(1, Number(rule && rule.conditionValue) || 1);
     if (condition === '无条件') return true;
-    if (condition === '爆能') return consumeEnergy(owner, amount, source.name + '被动效果爆能');
+    if (condition === '爆能') return consumeEnergy(owner, amount, source.name + '被动效果爆能', source);
     if (condition === '倒计时') {
       const key = 'condition:' + (rule.id == null ? '0' : rule.id);
       const current = source.simpleRuleState[key] == null ? amount : source.simpleRuleState[key];
@@ -1699,6 +1963,38 @@
     unitsOf(side, true).forEach(pet => runSimpleRules(pet, timing, []));
   }
 
+  const passiveEventStack = [];
+
+  function eventEntitySide(entity) {
+    if (!entity) return '';
+    if (entity.side) return entity.side;
+    const owner = entity.entityType === 'skill' ? ownerOf(entity) : null;
+    return owner ? owner.side : '';
+  }
+
+  function emitPassiveEffectEvent(mode, cause, actor, target, eventSource) {
+    const timing = mode === '触发' ? cause : `${mode}${cause}时`;
+    const candidate = eventSource || actor || target;
+    const effectTarget = target && target.entityType === 'skill' ? ownerOf(target) : target;
+    const side = mode === '受到' ? eventEntitySide(effectTarget) : (eventEntitySide(actor) || eventEntitySide(candidate));
+    if (!side || !timing) return;
+    const key = [timing, side, candidate && candidate.id, effectTarget && effectTarget.id].join(':');
+    if (passiveEventStack.length >= 24 || passiveEventStack.includes(key)) return;
+    passiveEventStack.push(key);
+    try {
+      const context = [candidate, effectTarget].filter((item, index, all) => item && all.indexOf(item) === index);
+      skillList(side).slice().forEach(skill => runSimpleRules(skill, timing, context));
+      unitsOf(side, true).slice().forEach(pet => runSimpleRules(pet, timing, context));
+    } finally {
+      passiveEventStack.pop();
+    }
+  }
+
+  function emitPassiveEffectPair(cause, actor, target, eventSource) {
+    emitPassiveEffectEvent('造成', cause, actor, target, eventSource);
+    emitPassiveEffectEvent('受到', cause, actor, target, eventSource);
+  }
+
   function runHealthThresholdRules(unit, triggerSource, beforeHp) {
     if (!unit || unit.dead || unit.maxHp <= 0) return;
     const before = Number(beforeHp) / unit.maxHp * 100;
@@ -1712,30 +2008,36 @@
     });
   }
 
-  function applyParalyze(source, target, amount, reason) {
+  function applyParalyze(source, target, amount, reason, eventSource) {
     if (!target || target.dead || !amount) return 0;
     const value = Math.max(0, Math.round(amount));
     target.paralyze += value;
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得麻痹 +' + value + '，当前 ' + target.paralyze + '（每层使用时7%失效）。', 'warn', 'STATUS');
     trace(target.name + ' 麻痹 +' + value, 'trigger');
+    const causeSource = eventSource || source || target;
+    emitPassiveEffectPair('麻痹', causeSource.entityType === 'skill' ? ownerOf(causeSource) : causeSource, target, causeSource);
     return value;
   }
 
-  function applySilence(source, target, amount, reason) {
+  function applySilence(source, target, amount, reason, eventSource) {
     if (!target || target.dead || !amount) return 0;
     const value = Math.max(0, Math.round(amount));
     target.silence = Math.max(target.silence, value);
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得封刃 ' + value + ' 回合。', 'warn', 'STATUS');
     trace(target.name + ' 封刃', 'trigger');
+    const causeSource = eventSource || source || target;
+    emitPassiveEffectPair('封刃', causeSource.entityType === 'skill' ? ownerOf(causeSource) : causeSource, target, causeSource);
     return value;
   }
 
-  function applyRoot(source, target, amount, reason) {
+  function applyRoot(source, target, amount, reason, eventSource) {
     if (!target || target.dead || !amount) return 0;
     const value = Math.max(0, Math.round(amount));
     target.rooted = Math.max(target.rooted, value);
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得禁足 ' + value + ' 回合，无法移动。', 'warn', 'STATUS');
     trace(target.name + ' 禁足', 'trigger');
+    const causeSource = eventSource || source || target;
+    emitPassiveEffectPair('禁足', causeSource.entityType === 'skill' ? ownerOf(causeSource) : causeSource, target, causeSource);
     return value;
   }
 
@@ -1769,8 +2071,8 @@
       passiveTargets.slice().forEach(target => {
         if (target.dead || target.hp <= 0) return;
         const value = genericAttackValue(passive, owner, 'damage');
-        if (passive.name === '连抓') triggerBurnOnHit(owner, target, passive, value);
-        damageUnit(owner, target, value, {attackHit: passive.name === '连抓', meta:'PASSIVE'});
+        // 连抓/锋锐鳞片属于受击触发的被动反击，不是进攻技能，不触发目标已有灼烧。
+        damageUnit(owner, target, value, {attackHit: passive.name === '连抓', meta:'PASSIVE', skillSource:passive});
       });
     });
   }
@@ -1802,10 +2104,12 @@
       const damageKind = options.status === '点燃' || options.status === '灼烧' ? 'burn' : options.status === '剧毒' || options.status === '淬毒' ? 'poison' : options.status === '霜冻' || options.status === '覆雪' ? 'frost' : 'damage';
       log((source ? '<strong>' + esc(source.name) + '</strong> 对 ' : '') + '<strong>' + esc(target.name) + '</strong> 造成 ' + logValue(damageKind, actual) + ' 点' + (options.status ? esc(options.status) : '') + '伤害。', options.status ? 'trigger' : 'output', options.meta || 'DAMAGE');
       trace((options.status || '伤害') + ' ' + target.name + ' -' + actual, options.status ? 'trigger' : 'output');
-      if (source && actual > 0) {
-        runSimpleRules(source, '造成伤害时', [target]);
-        if (source.entityType === 'skill') runSimpleRules(ownerOf(source), '造成伤害时', [target]);
-      }
+      const eventSource = options.skillSource || source || target;
+      const eventActor = eventSource.entityType === 'skill' ? ownerOf(eventSource) : (source || eventSource);
+      emitPassiveEffectPair('伤害', eventActor, target, eventSource);
+      if (options.status === '灼烧') emitPassiveEffectEvent('触发', '触发目标灼烧伤害时', eventActor, target, eventSource);
+      if (options.status === '霜冻') emitPassiveEffectEvent('触发', '触发霜冻伤害时', eventActor, target, eventSource);
+      if (options.status === '剧毒') emitPassiveEffectEvent('触发', '触发剧毒伤害时', eventActor, target, eventSource);
       runHealthThresholdRules(target, source, hpBefore);
     } else {
       log('<strong>' + esc(target.name) + '</strong> 的防御抵消了本次伤害。', 'trigger', options.meta || 'DEFENSE');
@@ -1819,10 +2123,8 @@
     }
     if (options.attackHit && source && !source.dead && source.side !== target.side && !options.skipRetaliation) {
       runSimpleRules(target, '被攻击时', [source]);
-      runSimpleRules(target, '受到伤害时', [source]);
       const attackedRules = skillList(target.side).filter(skill => skill.owner === target.id && (skill.simpleRules || []).some(rule => rule.timing === '被攻击时'));
       attackedRules.forEach(skill => runSimpleRules(skill, '被攻击时', [source]));
-      skillList(target.side).filter(skill => skill.owner === target.id && (skill.simpleRules || []).some(rule => rule.timing === '受到伤害时')).forEach(skill => runSimpleRules(skill, '受到伤害时', [source]));
       const retaliation = skillList(target.side).find(skill => skill.owner === target.id && skill.name === '饮血倒刺');
       if (retaliation && !(retaliation.simpleRules || []).some(rule => rule.timing === '被攻击时')) {
         const value = genericAttackValue(retaliation, target, 'damage');
@@ -1847,8 +2149,8 @@
     if (source && source.name === '赤精鱼') addEnergy(source, 4, '赤精鱼击杀奖励');
     if (source && source.name === '幼熊') {
       const growth = valueFromEffect(source.effect, [/提升(\d+)点攻击/], 3);
-      source.permanentAtk += growth;
-      source.atk += growth;
+      const applied = applyBuff(source, 'atk', growth, '幼熊击杀成长');
+      source.permanentAtk += applied;
       log('<strong>幼熊</strong> 击杀成长：永久攻击 +' + growth + '，当前攻击 ' + source.atk + '。', 'trigger', 'GROWTH');
     }
     if (hero.hp <= 0) finishBattle(opponentSide(unit.side));
@@ -1902,13 +2204,14 @@
   function passivesStart(side) {
     const units = unitsOf(side, true);
     const teamState = team(side);
-    teamState.skillDamage = teamState.skillDamage || 0;
+    // 光环/全体被动按各个接收技能分别记录，但与亢奋/衰弱平行，不改写也不消耗状态。
+    // 每次回合开始重新建立本回合的团队基础值，具体接收效果由 addSkillGrowth 逐技能结算。
     teamState.skillDamage = teamState.skillDamageGrowth || 0;
     const ant = units.find(unit => unit.name === '蚁王');
     if (ant) {
       const amount = valueFromEffect(ant.effect, [/技能伤害\+(\d+)/], 2);
-      teamState.skillDamage += amount;
-      log(sideLabel(side) + '蚁王在场：本方技能伤害基础值 +' + amount + '。', 'trigger', 'PET PASSIVE');
+      skillList(side).forEach(skill => addSkillGrowth(skill, 'damageBonus', amount, '蚁王在场光环', ant, {bypassStatus:true}));
+      log(sideLabel(side) + '蚁王在场：本方所有技能分别获得技能伤害 +' + amount + '（光环不触发亢奋/衰弱）。', 'trigger', 'PET PASSIVE');
     }
     const elephant = units.find(unit => unit.name === '圣象甲虫');
     if (elephant) {
@@ -1916,16 +2219,16 @@
       const def = valueFromEffect(elephant.effect, [/防御\+(\d+)/], 1);
       const skillDamage = valueFromEffect(elephant.effect, [/技能获得伤害\+(\d+)/], 8);
       units.filter(unit => unit.id !== elephant.id).forEach(unit => {
-        unit.atk += atk;
-        unit.def += def;
+        applyBuff(unit, 'atk', atk, '圣象甲虫攻击光环', elephant, {bypassStatus:true});
+        applyBuff(unit, 'def', def, '圣象甲虫防御光环', elephant, {bypassStatus:true});
       });
-      elephant.skillDamage = skillDamage;
+      elephant.skillDamage = adjustValueForStatus(elephant, skillDamage, 'increase', '技能伤害');
       log('圣象甲虫存活：其它友方攻击 +' + atk + '、防御 +' + def + '；自身技能伤害 +' + skillDamage + '。', 'trigger', 'PET PASSIVE');
     }
     units.filter(unit => unit.name === '鬼蜂').forEach(unit => {
       const amount = valueFromEffect(unit.legacyEffect || unit.effect, [/攻击\+(\d+)/], 2);
       const count = units.length;
-      unit.atk += amount * count;
+      applyBuff(unit, 'atk', amount * count, '鬼蜂存活友方攻击被动');
       log('<strong>鬼蜂</strong> 存活友方数量为 ' + count + '：本回合攻击 +' + (amount * count) + '，当前 ' + unit.atk + '。', 'trigger', 'PET PASSIVE');
     });
     units.filter(unit => unit.name === '巨鳄蚁').forEach(unit => {
@@ -1983,9 +2286,11 @@
       const damage = valueFromEffect(unit.legacyEffect || unit.effect, [/技能伤害提升(\d+)/], 4);
       const ignite = valueFromEffect(unit.legacyEffect || unit.effect, [/点燃提升(\d+)/], 1);
       if (unit.energy >= cost && consumeEnergy(unit, cost, '赤精鱼回合开始爆能')) {
-        unit.permanentSkillDamage += damage;
-        unit.permanentIgnite += ignite;
-        log('赤精鱼爆能成功：自身技能伤害 +' + damage + '、点燃 +' + ignite + '，持续至本场战斗结束。', 'trigger', 'PET EXPLOSION');
+        const appliedDamage = adjustValueForStatus(unit, damage, 'increase', '技能伤害');
+        const appliedIgnite = adjustValueForStatus(unit, ignite, 'increase', '点燃');
+        unit.permanentSkillDamage += appliedDamage;
+        unit.permanentIgnite += appliedIgnite;
+        log('赤精鱼爆能成功：自身技能伤害 +' + appliedDamage + '、点燃 +' + appliedIgnite + '，持续至本场战斗结束。', 'trigger', 'PET EXPLOSION');
       } else {
         log('赤精鱼能量不足' + cost + '，本回合不触发爆能特性。', 'trigger', 'PET EXPLOSION');
       }
@@ -2056,14 +2361,16 @@
     log('—— ' + sideLabel(side) + '回合开始效果结算完毕 ——', 'trigger', 'TURN START');
   }
 
-  function healUnit(source, target, amount, reason) {
+  function healUnit(source, target, amount, reason, eventSource) {
     if (!target || target.dead) return 0;
-    const value = Math.max(0, Math.round(amount || 0));
+    const value = adjustValueForStatus(target, amount, 'increase', '治疗');
     const actual = Math.min(value, target.maxHp - target.hp);
     if (actual > 0) {
       target.hp += actual;
       log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 恢复 ' + logValue('heal', actual) + ' 点生命。', 'trigger', 'HEAL');
       trace(target.name + ' 治疗 +' + actual, 'trigger');
+      const causeSource = eventSource || source || target;
+      emitPassiveEffectPair('治疗', causeSource.entityType === 'skill' ? ownerOf(causeSource) : causeSource, target, causeSource);
     } else {
       log('<strong>' + esc(target.name) + '</strong> 治疗量 ' + logValue('heal', value) + '，但已满生命，治疗没有溢出。', 'trigger', 'HEAL');
     }
@@ -2075,12 +2382,14 @@
     return actual;
   }
 
-  function applyRegen(source, target, amount, reason) {
+  function applyRegen(source, target, amount, reason, eventSource) {
     if (!target || target.dead || !amount) return 0;
-    const value = Math.max(0, Math.round(amount));
+    const value = adjustValueForStatus(target, amount, 'increase', '再生');
     target.regen += value;
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得再生 +' + logValue('heal', value) + '，当前 ' + logValue('heal', target.regen) + '。', 'trigger', 'STATUS');
     trace(target.name + ' 再生 +' + value, 'trigger');
+    const causeSource = eventSource || source || target;
+    emitPassiveEffectPair('再生', causeSource.entityType === 'skill' ? ownerOf(causeSource) : causeSource, target, causeSource);
     return value;
   }
 
@@ -2089,13 +2398,18 @@
     if (target) healUnit(source, target, amount, reason);
   }
 
-  function applyPoison(source, target, amount, reason) {
+  function applyPoison(source, target, amount, reason, eventSource, options) {
     if (!target || target.dead) return;
     let value = Math.max(1, Math.round(amount || 0));
     const old = target.poison;
     target.poison += value;
+    target.poisonEventSource = eventSource || source || target.poisonEventSource;
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得剧毒 +' + logValue('poison', value) + '，当前 ' + logValue('poison', target.poison) + '。', 'trigger', 'POISON');
     trace(target.name + ' 剧毒 +' + value, 'trigger');
+    const causeSource = eventSource || source || target;
+    const causeActor = causeSource.entityType === 'skill' ? ownerOf(causeSource) : causeSource;
+    emitPassiveEffectPair('淬毒', causeActor, target, causeSource);
+    emitPassiveEffectPair('剧毒', causeActor, target, causeSource);
     const blackRoses = [];
     if (source && source.name === '黑玫瑰' && !source.dead) blackRoses.push(source);
     if (target.name === '黑玫瑰' && !target.dead && !blackRoses.includes(target)) blackRoses.push(target);
@@ -2110,40 +2424,50 @@
       applyShield(crouch, target, shield, '蜷缩受到剧毒触发');
       applyRegen(crouch, target, regen, '蜷缩受到剧毒触发');
     }
-    if (old > 0) {
-      damageUnit(source, target, old, {status:'剧毒', ignoreShield:true, meta:'POISON PROC'});
-      log('目标已有剧毒，淬毒立即触发一次当前剧毒伤害。', 'trigger', 'POISON PROC');
+    if (old > 0 && options && options.canDetonate) {
+      damageUnit(source, target, old, {status:'剧毒', ignoreShield:true, meta:'POISON PROC', skillSource:eventSource});
+      log('目标已有剧毒，淬毒先叠加后立即触发毒爆，结算叠加前的剧毒伤害 ' + logValue('poison', old) + '。', 'trigger', 'POISON PROC');
     }
   }
 
-  function applyFrost(source, target, amount, reason) {
+  function applyFrost(source, target, amount, reason, eventSource) {
     if (!target || target.dead) return;
     const value = Math.max(1, Math.round(amount || 0));
     const old = target.frost;
     target.frost += value;
+    target.frostEventSource = eventSource || source || target.frostEventSource;
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得霜冻 +' + logValue('frost', value) + '，当前 ' + logValue('frost', target.frost) + '。', 'trigger', 'FROST');
     trace(target.name + ' 霜冻 +' + value, 'trigger');
+    const causeSource = eventSource || source || target;
+    const causeActor = causeSource.entityType === 'skill' ? ownerOf(causeSource) : causeSource;
+    emitPassiveEffectPair('覆雪', causeActor, target, causeSource);
+    emitPassiveEffectPair('霜冻', causeActor, target, causeSource);
     if (old > 0) {
       const defenseBefore = Math.max(0, target.def);
       const shieldBefore = Math.max(0, target.shield);
       const defenseLoss = Math.ceil(value / 2);
       const shieldLoss = value * 3;
-      target.def = Math.max(0, target.def - defenseLoss);
-      target.shield = Math.max(0, target.shield - shieldLoss);
-      log('<strong>' + esc(target.name) + '</strong> 已有霜冻，覆雪额外削减防御 ' + defenseLoss + '（' + defenseBefore + ' → ' + target.def + '），护盾 ' + logValue('shield', shieldLoss) + '（' + shieldBefore + ' → ' + target.shield + '）。', 'warn', 'FROST PROC');
+      const defenseLost = -applyDebuff(target, 'def', defenseLoss, '覆雪额外防御削减', eventSource);
+      const shieldLost = -applyDebuff(target, 'shield', shieldLoss, '覆雪额外护盾削减', eventSource);
+      log('<strong>' + esc(target.name) + '</strong> 已有霜冻，覆雪额外削减防御 ' + defenseLost + '（' + defenseBefore + ' → ' + target.def + '），护盾 ' + logValue('shield', shieldLost) + '（' + shieldBefore + ' → ' + target.shield + '）。', 'warn', 'FROST PROC');
       trace(target.name + ' 霜冻削防/护盾', 'trigger');
     }
   }
 
-  function applyBurn(source, target, amount, reason, attackHit) {
+  function applyBurn(source, target, amount, reason, attackHit, eventSource, options) {
     if (!target || target.dead) return;
     const value = Math.max(1, Math.round(amount || 0));
     const old = target.burn;
     target.burn += value;
+    target.burnEventSource = eventSource || source || target.burnEventSource;
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得灼烧 +' + logValue('burn', value) + '，当前 ' + logValue('burn', target.burn) + '。', 'trigger', 'BURN');
     trace(target.name + ' 灼烧 +' + value, 'trigger');
-    if (old > 0) {
-      damageUnit(source, target, value * 2, {status:'点燃', meta:'IGNITE PROC'});
+    const causeSource = eventSource || source || target;
+    const causeActor = causeSource.entityType === 'skill' ? ownerOf(causeSource) : causeSource;
+    emitPassiveEffectPair('点燃', causeActor, target, causeSource);
+    emitPassiveEffectPair('灼烧', causeActor, target, causeSource);
+    if (old > 0 && options && options.canIgnite) {
+      damageUnit(source, target, value * 2, {status:'点燃', meta:'IGNITE PROC', skillSource:eventSource});
       log('目标已有灼烧，点燃额外造成 ' + logValue('burn', value * 2) + ' 点伤害。', 'output', 'IGNITE PROC');
     }
     const crab = source && source.name === '花椒蟹' && !source.dead ? source : null;
@@ -2160,7 +2484,7 @@
   function triggerBurnOnHit(attacker, target, skill, damageBase) {
     if (!target || target.dead || target.burn <= 0) return 0;
     const burnDamage = target.burn;
-    damageUnit(attacker, target, burnDamage, {status:'灼烧', meta:'BURN PROC'});
+    damageUnit(attacker, target, burnDamage, {status:'灼烧', meta:'BURN PROC', skillSource:skill});
     target.burn = Math.max(1, Math.floor(target.burn * 0.9));
     log('<strong>' + esc(target.name) + '</strong> 被攻击技能命中，灼烧追加 ' + logValue('burn', burnDamage) + '，层数按10%衰减至 ' + logValue('burn', target.burn) + '。', 'trigger', 'BURN PROC');
     if (attacker && attacker.name === '白蔷薇') {
@@ -2170,18 +2494,18 @@
     return burnDamage;
   }
 
-  function applyShield(source, target, amount, reason) {
+  function applyShield(source, target, amount, reason, eventSource) {
     if (!target || target.dead) return;
     let value = Math.max(0, Math.round(amount || 0));
     if (target.name === '巨伞蕈') value = Math.floor(value / 2);
-    if (target.weak > 0) value = Math.floor(value / 2);
-    if (target.excited > 0) {
-      value *= 2;
-      target.excited -= 1;
-    }
+    value = adjustValueForStatus(target, value, 'increase', '护盾');
     target.shield += value;
     log((reason ? esc(reason) + '：' : '') + '<strong>' + esc(target.name) + '</strong> 获得护盾 ' + logValue('shield', '+' + value) + '。', 'trigger', 'SHIELD');
     trace(target.name + ' 护盾 +' + value, 'trigger');
+    if (value) {
+      const causeSource = eventSource || source || target;
+      emitPassiveEffectPair('护盾', causeSource.entityType === 'skill' ? ownerOf(causeSource) : causeSource, target, causeSource);
+    }
     if (target.name === '鲛人抢手' && value > 0) {
       const skill = pseudoRandomTargets(skillList(target.side).filter(item => item.owner === target.id && !isPassiveSkill(item)), {id:'shark-gunner-' + target.id + '-' + state.action}, 1)[0];
       const growth = valueFromEffect(target.legacyEffect || target.effect, [/技能伤害提升(\d+)点/], 10);
@@ -2194,9 +2518,15 @@
     }
   }
 
-  function grantAmmo(side, amount) {
+  function grantAmmo(side, amount, eventSource) {
     skillList(side).filter(skill => skill.ammoMax).forEach(skill => {
+      const before = skill.ammo;
       skill.ammo = Math.min(skill.ammoMax, skill.ammo + amount);
+      if (skill.ammo > before) {
+        const targetOwner = ownerOf(skill);
+        const sourceOwner = eventSource && eventSource.entityType === 'skill' ? ownerOf(eventSource) : eventSource;
+        emitPassiveEffectPair('装填弹药', sourceOwner || targetOwner, targetOwner, eventSource || targetOwner);
+      }
     });
     log(sideLabel(side) + '弹药技能统一装填 ' + amount + ' 枚。', 'trigger', 'AMMO');
   }
@@ -2204,11 +2534,11 @@
   function explosionFor(skill, owner) {
     if (!skill.explosionCost) return false;
     if (owner.energy >= skill.explosionCost) {
-      consumeEnergy(owner, skill.explosionCost, skill.name + ' 爆能');
+      consumeEnergy(owner, skill.explosionCost, skill.name + ' 爆能', skill);
       log('<strong>' + esc(skill.name) + '</strong> 爆能成功：执行冒号后的强化效果。', 'trigger', 'EXPLOSION');
       return true;
     }
-    addEnergy(owner, SIZE_SLOTS[skill.size], skill.name + ' 爆能补偿');
+    addEnergy(owner, SIZE_SLOTS[skill.size], skill.name + ' 爆能补偿', skill);
     log('<strong>' + esc(skill.name) + '</strong> 能量不足，未触发爆能；按技能体积获得 ' + SIZE_SLOTS[skill.size] + ' 点补偿能量。', 'warn', 'EXPLOSION');
     return false;
   }
@@ -2257,6 +2587,7 @@
     if (!guaranteed && !(chance > 0 && roll < chance)) return false;
     log('<strong>' + esc(owner.name) + '</strong> 的 <strong>' + esc(skill.name) + '</strong> 触发暴击' + (guaranteed ? '（首次使用必定暴击）' : '（当前暴击率 ' + chance + '%）') + '。', 'output', 'CRITICAL');
     trace(skill.name + ' 暴击', 'output');
+    emitPassiveEffectEvent('触发', '技能触发暴击时', owner, targets[0] || owner, skill);
     const dragonSkills = skillList(owner.side).filter(item => item.name === '龙牙斩');
     dragonSkills.forEach(dragon => {
       const amount = valueFromEffect(dragon.effect, [/伤害\+(\d+)/], 5);
@@ -2373,7 +2704,7 @@
         } else {
           log('<strong>' + esc(skill.name) + '</strong> 无目标，但按技能原文“未命中也会触发”。', 'trigger', 'TARGET');
         }
-        addEnergy(owner, missCharge, skill.name + '未命中充能');
+        addEnergy(owner, missCharge, skill.name + '未命中充能', skill);
         skill.used += 1;
         owner.skillUses += 1;
         trace(skill.name + ' 未命中仍充能' + missCharge, 'trigger');
@@ -2465,12 +2796,22 @@
     const regenValue = primaryValueBreakdown(skill, owner, 'regen').value;
     log('<strong>' + esc(owner.name) + '</strong> 使用 <strong>' + esc(skill.name) + '</strong>，按技能栏顺序结算（' + label + '）。', 'trigger', 'SKILL');
     trace(owner.name + ' → ' + skill.name, 'trigger');
-    // 主动使用一个技能会触发同一灵宠的“使用自身携带其它技能时”，并通知己方所有技能。
-    skillList(side).filter(other => other.id !== skill.id && other.owner === owner.id && (other.simpleRules || []).some(rule => rule.timing === '使用自身携带其它技能时')).forEach(other => runSimpleRules(other, '使用自身携带其它技能时', [owner]));
-    skillList(side).filter(other => other.id !== skill.id && (other.simpleRules || []).some(rule => rule.timing === '使用任意技能时')).forEach(other => runSimpleRules(other, '使用任意技能时', [owner]));
-    unitsOf(side, true).filter(pet => pet.id !== owner.id && (pet.simpleRules || []).some(rule => rule.timing === '使用任意技能时')).forEach(pet => runSimpleRules(pet, '使用任意技能时', [owner]));
+    // 使用技能类被动接收“触发技能 + 本次实际目标”，供“技能同一目标”准确继承。
+    const inheritedUseTargets = [skill, ...targets];
+    const currentBar = skillList(side);
+    const usedSkillIndex = currentBar.indexOf(skill);
+    currentBar.filter(other => other.id !== skill.id && other.owner === owner.id && (other.simpleRules || []).some(rule => rule.timing === '使用自身携带的其它技能时')).forEach(other => runSimpleRules(other, '使用自身携带的其它技能时', inheritedUseTargets));
+    currentBar.filter(other => other.id !== skill.id && (other.simpleRules || []).some(rule => rule.timing === '使用任意技能时')).forEach(other => runSimpleRules(other, '使用任意技能时', inheritedUseTargets));
+    [
+      ['使用左侧相邻技能时', otherIndex => usedSkillIndex === otherIndex - 1],
+      ['使用右侧相邻技能时', otherIndex => usedSkillIndex === otherIndex + 1],
+      ['使用两侧相邻技能时', otherIndex => Math.abs(usedSkillIndex - otherIndex) === 1]
+    ].forEach(([timing, matches]) => currentBar.forEach((other, otherIndex) => {
+      if (other.id !== skill.id && matches(otherIndex) && (other.simpleRules || []).some(rule => rule.timing === timing)) runSimpleRules(other, timing, inheritedUseTargets);
+    }));
+    unitsOf(side, true).filter(pet => pet.id !== owner.id && (pet.simpleRules || []).some(rule => rule.timing === '使用任意技能时')).forEach(pet => runSimpleRules(pet, '使用任意技能时', inheritedUseTargets));
     const charge = parseFirst(skill.legacyEffect, [/充能\s*(\d+)/], 0);
-    if (charge && skill.legacyChargeBeforeSimpleGate) addEnergy(owner, charge, skill.name + '爆能前充能');
+    if (charge && skill.legacyChargeBeforeSimpleGate) addEnergy(owner, charge, skill.name + '爆能前充能', skill);
     const simpleResult = runSimpleRules(skill, '使用时', targets);
     if (!simpleResult.allowBase) {
       log('<strong>' + esc(skill.name) + '</strong> 未满足“应用于此技能”的爆能或倒计时条件，基础能力与后续效果不生效。', 'warn', 'SIMPLE GATE');
@@ -2481,8 +2822,13 @@
     }
 
     if (shellSkill) {
-      skill.breakShellBonus = shellAttackReady ? owner.shield * 2 : 0;
-      if (shellAttackReady) {
+      if (skill.simpleBreakShellApplied) {
+        skill.breakShellBonus = 0;
+        skill.simpleBreakShellApplied = false;
+      } else {
+        skill.breakShellBonus = shellAttackReady ? owner.shield * 2 : 0;
+      }
+      if (shellAttackReady && skill.breakShellBonus > 0) {
         const lostShield = owner.shield;
         owner.shield = 0;
         log('<strong>' + esc(skill.name) + '</strong> 破壳：移除 ' + logValue('shield', lostShield) + ' 点当前护盾，本次攻击附加 ' + logValue('damage', skill.breakShellBonus) + ' 点伤害。', 'trigger', 'BREAKSHELL');
@@ -2490,23 +2836,23 @@
       }
     }
 
-    if (charge && !skill.legacyChargeBeforeSimpleGate) addEnergy(owner, charge, skill.name + '技能');
+    if (charge && !skill.legacyChargeBeforeSimpleGate) addEnergy(owner, charge, skill.name + '技能', skill);
     if (skill.name === '吐纳术' && explosion) {
       const amount = valueFromEffect(skill.effect, [/提升(\d+)点攻击/], 2);
-      owner.permanentAtk += amount;
-      owner.atk += amount;
-      log('吐纳术爆能成功：' + owner.name + ' 获得永久攻击 +' + amount + '。', 'trigger', 'EXPLOSION');
+      const applied = applyBuff(owner, 'atk', amount, '吐纳术永久攻击成长', skill);
+      owner.permanentAtk += applied;
+      log('吐纳术爆能成功：' + owner.name + ' 获得永久攻击 +' + applied + '。', 'trigger', 'EXPLOSION');
     }
-    if (/装填弹药|快速装弹|快速换弹/.test(skill.name)) grantAmmo(side, 2);
-    if (skill.name === '轻击') addEnergy(owner, 1, '轻击使用充能（即使未命中）');
+    if (/装填弹药|快速装弹|快速换弹/.test(skill.name)) grantAmmo(side, 2, skill);
+    if (skill.name === '轻击') addEnergy(owner, 1, '轻击使用充能（即使未命中）', skill);
     if (shieldValue && /护盾|护甲/.test(skill.ability + skill.effect)) {
       const shieldTargets = skill.name === '蜕壳投掷' || skill.name === '凝血铠甲' || skill.name === '披甲' || skill.name === '叠甲'
         ? [owner]
         : targetsForEffectScope(skill, owner, valueTargets, ['护盾', '护甲']);
       shieldTargets.filter(target => target && !target.dead).forEach(target => applyShield(skill, target, shieldValue, skill.name));
     }
-    if (healValue && /治疗/.test(skill.ability)) targetsForEffectScope(skill, owner, valueTargets, ['治疗', '恢复生命']).forEach(target => healUnit(owner, target, healValue, skill.name));
-    if (regenValue && /再生/.test(skill.ability) && skill.name !== '泰诺地龙') targetsForEffectScope(skill, owner, valueTargets, ['再生']).forEach(target => applyRegen(owner, target, regenValue, skill.name));
+    if (healValue && /治疗/.test(skill.ability)) targetsForEffectScope(skill, owner, valueTargets, ['治疗', '恢复生命']).forEach(target => healUnit(owner, target, healValue, skill.name, skill));
+    if (regenValue && /再生/.test(skill.ability) && skill.name !== '泰诺地龙') targetsForEffectScope(skill, owner, valueTargets, ['再生']).forEach(target => applyRegen(owner, target, regenValue, skill.name, skill));
     if (skill.name === '使劲') {
       const amount = valueFromEffect(skill.effect, [/获得(\d+)点技能伤害提升/], 2);
       skillList(side).filter(item => item.owner === owner.id).forEach(item => addSkillGrowth(item, 'damageBonus', amount, '使劲自身技能成长'));
@@ -2527,11 +2873,11 @@
       unitsOf(side, true).forEach(target => applyExcited(owner, target, excited, '灵气淬体爆能'));
     }
 
-    const burnSkill = (/引火|天火咒|火球|鞭炮|妒火|热流沙/.test(skill.name) || /点燃/.test(skill.ability))
+    const burnSkill = !skill.activeAbilityManaged && isIgniteSkill(skill)
       && (!skill.explosionCost || explosion || !/爆能/.test(skill.legacyEffect))
       && regularEffectReady;
-    const poisonSkill = /毒钩|毒雾|蜈蚣锁|寒蛇影|蛇影寒|泰诺地龙|毒腺/.test(skill.name) || /淬毒/.test(skill.ability);
-    const frostSkill = /覆雪|结霜/.test(skill.name + ' ' + skill.ability) && regularEffectReady;
+    const poisonSkill = !skill.activeAbilityManaged && isPoisonSkill(skill);
+    const frostSkill = !skill.activeAbilityManaged && isFrostSkill(skill) && regularEffectReady;
     const frostValue = valueEntriesOf(skill).find(entry => entry.kind === 'frost');
     const directDamage = valueEntriesOf(skill).some(entry => entry.kind === 'damage') || /造成伤害/.test(skill.legacyEffect);
     const directDamageForUse = directDamage && shellAttackReady;
@@ -2550,6 +2896,15 @@
     effectTargets.forEach(target => {
       if (!regularEffectReady) return;
       const triggerCount = Math.max(1, multi);
+      const dotTarget = burnTargetIds.has(target.id) || poisonTargetIds.has(target.id) || frostTargetIds.has(target.id);
+      // 点燃、淬毒、覆雪本身也属于进攻。它们没有直接伤害循环时，仍要先触发
+      // 命中目标已有的灼烧，再处理本次状态赋予；被动反击不走这条路径。
+      if (!skill.activeAbilityManaged && attackSkill && target.side !== owner.side && dotTarget && !damageTargetIds.has(target.id) && !directDamageForUse && target.hp > 0) {
+        for (let hit = 0; hit < triggerCount; hit += 1) {
+          if (target.dead || target.hp <= 0) break;
+          triggerBurnOnHit(owner, target, skill, genericAttackValue(skill, owner, 'damage'));
+        }
+      }
       if (!directDamageForUse && attackEffectReady && damageTargetIds.has(target.id) && !target.dead) {
         for (let hit = 0; hit < triggerCount; hit += 1) {
           if (target.dead || target.hp <= 0) break;
@@ -2558,13 +2913,13 @@
       }
       if (burnTargetIds.has(target.id)) {
         const burn = genericAttackValue(skill, owner, 'burn');
-        for (let hit = 0; hit < Math.max(1, multi); hit += 1) applyBurn(owner, target, burn, skill.name + '点燃', owner.name === '花椒蟹');
+        for (let hit = 0; hit < Math.max(1, multi); hit += 1) applyBurn(owner, target, burn, skill.name + '点燃', owner.name === '花椒蟹', skill, {canIgnite: isIgniteSkill(skill)});
       }
       if (poisonTargetIds.has(target.id)) {
-        applyPoison(owner, target, genericAttackValue(skill, owner, 'poison'), skill.name + '淬毒');
+        applyPoison(owner, target, genericAttackValue(skill, owner, 'poison'), skill.name + '淬毒', skill, {canDetonate: isPoisonSkill(skill)});
       }
       if (frostTargetIds.has(target.id) && frostValue && attackSkill && target.hp > 0) {
-        applyFrost(owner, target, valueBreakdown(skill, owner, frostValue).value, skill.name + '覆雪');
+        applyFrost(owner, target, valueBreakdown(skill, owner, frostValue).value, skill.name + '覆雪', skill);
       }
       if (damageTargetIds.has(target.id) && directDamageForUse && attackEffectReady && target.hp > 0 && regularEffectReady) {
         for (let i = 0; i < multi; i += 1) {
@@ -2579,8 +2934,8 @@
             else owner.firstMartialReady = false;
             log('饿狼本回合第一个' + (wolfAnySkill ? '技能' : '武技技能') + '伤害翻倍。', 'trigger', 'PET PROC');
           }
-          damageUnit(owner, target, value, {attackHit:true, meta:'ATTACK'});
-          if (/雷电牙|镇雷/.test(skill.name)) applyParalyze(owner, target, 1, skill.name + '命中');
+          damageUnit(owner, target, value, {attackHit:true, meta:'ATTACK', skillSource:skill});
+          if (/雷电牙|镇雷/.test(skill.name)) applyParalyze(owner, target, 1, skill.name + '命中', skill);
         }
       }
     });
@@ -2589,6 +2944,14 @@
       directTargets.filter(target => target && target.side !== owner.side).forEach(target => {
         resolveDisplacement(skill, owner, target, mode, genericAttackValue(skill, owner, 'damage'));
       });
+    }
+    if (regularEffectReady && Array.isArray(skill.activeAddons)) {
+      const movementAddons = skill.activeAddons.filter(addon => addon.type === '拖拽' || addon.type === '击退');
+      for (let repeat = 0; repeat < Math.max(1, multi); repeat += 1) {
+        movementAddons.forEach(addon => directTargets.filter(target => target && target.side !== owner.side && !target.dead).forEach(target => {
+          resolveDisplacement(skill, owner, target, addon.type === '拖拽' ? 'pull' : 'push', 0);
+        }));
+      }
     }
     if (attackEffectReady) triggerPassiveAttacks(owner, skill, targets);
 
@@ -2656,13 +3019,21 @@
     unitsOf(side, true).forEach(unit => {
       if (unit.poison > 0) {
         const value = unit.poison;
-        damageUnit(null, unit, value, {status:'剧毒', ignoreShield:true, meta:'POISON TICK'});
+        const poisonSource = unit.poisonEventSource;
+        const poisonActor = poisonSource && poisonSource.entityType === 'skill' ? ownerOf(poisonSource) : poisonSource;
+        damageUnit(poisonActor || null, unit, value, {status:'剧毒', ignoreShield:true, meta:'POISON TICK', skillSource:poisonSource});
         unit.poison = Math.max(0, unit.poison - 2);
         log('<strong>' + esc(unit.name) + '</strong> 回合结束剧毒 -2，剩余 ' + unit.poison + '。', 'trigger', 'POISON TICK');
       }
       if (unit.regen > 0 && unit.hp > 0) healUnit(null, unit, unit.regen, '再生结算');
-      if (unit.excited > 0) unit.excited = Math.max(0, unit.excited - 1);
-      if (unit.weak > 0) unit.weak = Math.max(0, unit.weak - 1);
+      if (unit.excited > 0) {
+        unit.excited = Math.max(0, unit.excited - 1);
+        log('<strong>' + esc(unit.name) + '</strong> 回合结束亢奋 -1，剩余 ' + unit.excited + '。', 'trigger', 'STATUS DECAY');
+      }
+      if (unit.weak > 0) {
+        unit.weak = Math.max(0, unit.weak - 1);
+        log('<strong>' + esc(unit.name) + '</strong> 回合结束衰弱 -1，剩余 ' + unit.weak + '。', 'trigger', 'STATUS DECAY');
+      }
       if (unit.paralyze > 0) unit.paralyze = Math.max(0, unit.paralyze - 1);
     });
     unitsOf(side, true).filter(unit => unit.name === '玄铁龟').forEach(unit => {
@@ -2672,8 +3043,9 @@
     const frog = unitsOf(side, true).find(unit => unit.name === '角蛙');
     if (frog) {
       const amount = valueFromEffect(frog.effect, [/技能伤害\+(\d+)/], 2);
-      team(side).skillDamageGrowth = (team(side).skillDamageGrowth || 0) + amount;
-      log('角蛙回合结束被动：本方后续技能伤害 +' + amount + '。', 'trigger', 'PET PASSIVE');
+      // 按技能栏顺序逐个记录光环成长；光环与接收灵宠的亢奋/衰弱平行。
+      skillList(side).forEach(skill => addSkillGrowth(skill, 'damageBonus', amount, '角蛙回合结束光环', frog, {bypassStatus:true}));
+      log('角蛙回合结束被动：本方全体技能分别获得技能伤害 +' + amount + '（光环不触发亢奋/衰弱）。', 'trigger', 'PET PASSIVE');
     }
     log('—— ' + sideLabel(side) + '回合结束效果结算完毕 ——', 'trigger', 'TURN END');
   }
@@ -2976,9 +3348,11 @@
 
   function configValueHtml(skillItem, owner) {
     const skill = previewSkill(skillItem, owner);
-    const values = skillValueBreakdowns(skill, owner);
-    if (!values.length) return '<p class="detail-empty">该技能没有可直接计算的数值，具体触发效果请查看原始文案。</p>';
-    return '<div class="detail-label">基础实际数值与构成</div><div class="value-breakdown-list">' + values.map(item => '<div class="value-breakdown"><div><span>' + esc(item.label) + '</span><strong>' + item.value + '</strong></div><p>' + esc(valueFormula(item)) + '</p></div>').join('') + '</div>';
+    const render = (label, channel) => {
+      const values = skillValueBreakdowns(skill, owner, channel);
+      return '<div class="detail-label">' + label + '</div>' + (values.length ? '<div class="value-breakdown-list">' + values.map(item => '<div class="value-breakdown"><div><span>' + esc(item.label) + '</span><strong>' + item.value + '</strong></div><p>' + esc(valueFormula(item)) + '</p></div>').join('') + '</div>' : '<p class="detail-empty">无可直接计算的数值</p>');
+    };
+    return render('主动实际数值与构成', 'active') + render('被动实际数值与构成', 'passive');
   }
 
   function renderConfigInfoModal() {
@@ -3284,11 +3658,19 @@
   $('#guide-modal').addEventListener('click', event => {
     if (event.target.id === 'guide-modal') closeGuide();
   });
+  $('#format-log').addEventListener('click', openLogText);
+  $('#copy-log-text').addEventListener('click', copyLogText);
+  $('#download-log-text').addEventListener('click', downloadLogText);
+  $('#close-log-text').addEventListener('click', closeLogText);
+  $('#log-text-modal').addEventListener('click', event => {
+    if (event.target.id === 'log-text-modal') closeLogText();
+  });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       closeSkillInfo();
       closeConfigInfo();
       closeGuide();
+      closeLogText();
     }
   });
   $('#clear-log').addEventListener('click', () => {
